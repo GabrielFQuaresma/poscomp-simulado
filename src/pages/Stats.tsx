@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Question, QuestionsData } from '../types'
 import { AREA_LABELS, loadQuestions, questionImageUrl } from '../lib/questions'
-import { getAttempts, getFinishedSessions } from '../lib/storage'
-import { scoreSession } from '../lib/examLogic'
+import { getAttempts, getFinishedSessions, getSrsMap } from '../lib/storage'
+import { dueSrsQuestions, scoreSession } from '../lib/examLogic'
 
 export default function Stats() {
   const [data, setData] = useState<QuestionsData | null>(null)
@@ -20,6 +20,9 @@ export default function Stats() {
 
   const sessions = getFinishedSessions()
   const attempts = getAttempts()
+  const srsMap = getSrsMap()
+  const srsTracked = Object.keys(srsMap).length
+  const srsDue = data ? dueSrsQuestions(data.questions, srsMap, Date.now()).length : 0
 
   if (!data) return <p>Carregando...</p>
 
@@ -88,6 +91,20 @@ export default function Stats() {
           {overallCorrect}/{overallTotal} questoes distintas respondidas
         </p>
       </section>
+
+      {srsTracked > 0 && (
+        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="font-semibold mb-1">Revisao espacada</h2>
+            <p className="text-sm text-gray-500">
+              {srsTracked} questoes na agenda de revisao · {srsDue} vencidas agora
+            </p>
+          </div>
+          <Link to="/" className="px-3 py-2 rounded bg-indigo-600 text-white text-sm font-medium whitespace-nowrap">
+            Ir revisar
+          </Link>
+        </section>
+      )}
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
         <h2 className="font-semibold mb-3">Evolucao (nota por simulado)</h2>

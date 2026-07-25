@@ -1,5 +1,6 @@
-import type { Area, AnswerLetter, CorrectionMode, ExamMode, ExamSession, Question, QuestionAttemptRecord } from '../types'
+import type { Area, AnswerLetter, CorrectionMode, ExamMode, ExamSession, Question, QuestionAttemptRecord, SrsState } from '../types'
 import { getAttempts } from './storage'
+import { isDue, reviewSrs } from './srs'
 
 export function newSessionId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -109,16 +110,39 @@ export function buildAreaExam(
   return createSession('area', label, ids, opts)
 }
 
-export function buildWrongExam(questions: Question[], opts: NewExamOptions): ExamSession {
-  const attempts = getAttempts()
-  const lastByQuestion = new Map<string, boolean>()
-  for (const a of attempts.sort((x, y) => x.timestamp - y.timestamp)) {
-    lastByQuestion.set(a.questionId, a.correct)
+/** Questoes com revisao vencida (dueAt <= now), das mais atrasadas para as
+ * menos atrasadas, para priorizar o que esta ha mais tempo esperando. */
+export function dueSrsQuestions(questions: Question[], srsMap: Record<string, SrsState>, now: number): Question[] {
+  return questions
+    .filter((q) => isDue(srsMap[q.id], now))
+    .sort((a, b) => srsMap[a.id].dueAt - srsMap[b.id].dueAt)
+}
+
+export function buildSrsExam(
+  questions: Question[],
+  srsMap: Record<string, SrsState>,
+  opts: NewExamOptions,
+): ExamSession {
+  const due = dueSrsQuestions(questions, srsMap, Date.now()).map((q) => q.id)
+  return createSession('srs', `Revisao espacada (${due.length}q)`, due, opts)
+}
+
+/** Atualiza o estado de repeticao espacada (SM-2) de cada questao respondida
+ * na sessao. Questoes em branco sao ignoradas: nao houve tentativa a avaliar. */
+export function buildSrsUpdates(
+  session: ExamSession,
+  questionMap: Map<string, Question>,
+  srsMap: Record<string, SrsState>,
+  now: number,
+): SrsState[] {
+  const updates: SrsState[] = []
+  for (const id of session.questionIds) {
+    const q = questionMap.get(id)
+    const resp = session.responses[id]
+    if (!q || !resp) continue
+    updates.push(reviewSrs(srsMap[id], isCorrect(q, resp), now, id))
   }
-  const wrongIds = questions
-    .filter((q) => lastByQuestion.get(q.id) === false)
-    .map((q) => q.id)
-  return createSession('wrong', `Refazer erradas (${wrongIds.length}q)`, shuffle(wrongIds), opts)
+  return updates
 }
 
 export function isCorrect(question: Question, answer: AnswerLetter | undefined): boolean {

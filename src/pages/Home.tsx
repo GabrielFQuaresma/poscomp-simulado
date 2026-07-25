@@ -5,13 +5,15 @@ import { loadQuestions, AREA_LABELS } from '../lib/questions'
 import {
   buildAreaExam,
   buildRandomExam,
-  buildWrongExam,
+  buildSrsExam,
   buildYearExam,
+  dueSrsQuestions,
 } from '../lib/examLogic'
 import {
   deleteSession,
   exportData,
   getInProgressSessions,
+  getSrsMap,
   importData,
   resetAll,
   upsertSession,
@@ -25,6 +27,8 @@ export default function Home() {
   const [data, setData] = useState<QuestionsData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [inProgress, setInProgress] = useState<ExamSession[]>([])
+  const [dueCount, setDueCount] = useState(0)
+  const [trackedCount, setTrackedCount] = useState(0)
 
   const [correctionMode, setCorrectionMode] = useState<CorrectionMode>('exam')
   const [timerEnabled, setTimerEnabled] = useState(true)
@@ -39,7 +43,12 @@ export default function Home() {
 
   useEffect(() => {
     loadQuestions()
-      .then(setData)
+      .then((d) => {
+        setData(d)
+        const srsMap = getSrsMap()
+        setDueCount(dueSrsQuestions(d.questions, srsMap, Date.now()).length)
+        setTrackedCount(Object.keys(srsMap).length)
+      })
       .catch((e) => setError(String(e)))
     setInProgress(getInProgressSessions())
   }, [])
@@ -81,9 +90,9 @@ export default function Home() {
     )
   }
 
-  function startWrong() {
+  function startSrsReview() {
     if (!data) return
-    startSession(buildWrongExam(data.questions, { ...opts(), timeLimitSeconds: null }))
+    startSession(buildSrsExam(data.questions, getSrsMap(), { ...opts(), timeLimitSeconds: null }))
   }
 
   function handleExport() {
@@ -242,9 +251,18 @@ export default function Home() {
       </section>
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-        <h2 className="font-semibold mb-3">Refazer erradas</h2>
-        <button className="px-4 py-2 rounded bg-indigo-600 text-white font-medium" onClick={startWrong}>
-          Refazer questoes que ja errei
+        <h2 className="font-semibold mb-1">Revisao espacada</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          {trackedCount === 0
+            ? 'Responda questoes em qualquer modo para comecar a agenda de revisao (algoritmo SM-2, tipo Anki).'
+            : `${dueCount} de ${trackedCount} questoes acompanhadas estao com revisao vencida hoje. Quem voce erra volta amanha; quem acerta espaca cada vez mais.`}
+        </p>
+        <button
+          className="px-4 py-2 rounded bg-indigo-600 text-white font-medium disabled:opacity-50"
+          disabled={dueCount === 0}
+          onClick={startSrsReview}
+        >
+          Revisar {dueCount > 0 ? `${dueCount} questoes` : 'agora'}
         </button>
       </section>
 

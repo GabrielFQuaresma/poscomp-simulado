@@ -1,9 +1,9 @@
-import type { AppData, ExamSession, QuestionAttemptRecord } from '../types'
+import type { AppData, ExamSession, QuestionAttemptRecord, SrsState } from '../types'
 
 const STORAGE_KEY = 'poscomp-simulado:data'
 
 function emptyData(): AppData {
-  return { version: 1, sessions: [], attempts: [] }
+  return { version: 1, sessions: [], attempts: [], srs: {} }
 }
 
 export function loadData(): AppData {
@@ -12,6 +12,7 @@ export function loadData(): AppData {
   try {
     const parsed = JSON.parse(raw) as AppData
     if (!parsed.sessions || !parsed.attempts) return emptyData()
+    parsed.srs ??= {}
     return parsed
   } catch {
     return emptyData()
@@ -60,6 +61,17 @@ export function getAttempts(): QuestionAttemptRecord[] {
   return loadData().attempts
 }
 
+export function getSrsMap(): Record<string, SrsState> {
+  return loadData().srs
+}
+
+export function saveSrsStates(states: SrsState[]): void {
+  if (states.length === 0) return
+  const data = loadData()
+  for (const s of states) data.srs[s.questionId] = s
+  saveData(data)
+}
+
 export function resetAll(): void {
   localStorage.removeItem(STORAGE_KEY)
 }
@@ -92,10 +104,19 @@ export function importData(json: string): { sessions: number; attempts: number }
   for (const a of current.attempts) attemptMap.set(attemptKey(a), a)
   for (const a of incoming.attempts) attemptMap.set(attemptKey(a), a)
 
+  const srs: Record<string, SrsState> = { ...current.srs }
+  for (const [qid, incomingState] of Object.entries(incoming.srs ?? {})) {
+    const existing = srs[qid]
+    if (!existing || incomingState.lastReviewedAt >= existing.lastReviewedAt) {
+      srs[qid] = incomingState
+    }
+  }
+
   const merged: AppData = {
     version: 1,
     sessions: Array.from(sessionMap.values()),
     attempts: Array.from(attemptMap.values()),
+    srs,
   }
   saveData(merged)
   return { sessions: merged.sessions.length, attempts: merged.attempts.length }

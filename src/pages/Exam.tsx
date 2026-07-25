@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { AnswerLetter, ExamSession, Question, QuestionsData } from '../types'
 import { loadQuestions, questionImageUrl, AREA_LABELS } from '../lib/questions'
-import { buildAttemptRecords, isCorrect } from '../lib/examLogic'
-import { addAttempts, getSession, upsertSession } from '../lib/storage'
+import { buildAttemptRecords, buildSrsUpdates, isCorrect } from '../lib/examLogic'
+import { addAttempts, getSession, getSrsMap, saveSrsStates, upsertSession } from '../lib/storage'
 
 const LETTERS: AnswerLetter[] = ['A', 'B', 'C', 'D', 'E']
 
@@ -102,6 +102,7 @@ export default function Exam() {
     upsertSession(finished)
     const qmap = new Map(data.questions.map((q) => [q.id, q]))
     addAttempts(buildAttemptRecords(finished, qmap))
+    saveSrsStates(buildSrsUpdates(finished, qmap, getSrsMap(), Date.now()))
     navigate(`/results/${finished.id}`)
   }
 

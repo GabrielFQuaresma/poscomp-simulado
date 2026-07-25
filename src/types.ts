@@ -18,7 +18,7 @@ export interface QuestionsData {
 
 export type AnswerLetter = 'A' | 'B' | 'C' | 'D' | 'E'
 
-export type ExamMode = 'year' | 'random' | 'area' | 'wrong'
+export type ExamMode = 'year' | 'random' | 'area' | 'srs'
 export type CorrectionMode = 'exam' | 'study'
 
 export interface ExamSession {
@@ -43,8 +43,18 @@ export interface QuestionAttemptRecord {
   correct: boolean
 }
 
+export interface SrsState {
+  questionId: string
+  repetitions: number
+  intervalDays: number
+  easeFactor: number
+  dueAt: number
+  lastReviewedAt: number
+}
+
 export interface AppData {
   version: 1
   sessions: ExamSession[]
   attempts: QuestionAttemptRecord[]
+  srs: Record<string, SrsState>
 }
