@@ -6,6 +6,14 @@ import { loadTopics, topicLabelMap } from '../lib/topics'
 import { isCorrect, pacingSummary, scoreSession, targetSecondsPerQuestion } from '../lib/examLogic'
 import { getSession } from '../lib/storage'
 import TopicTags from '../components/TopicTags'
+import ScratchPad from '../components/ScratchPad'
+import { hasContent, loadScratch, type Scratch } from '../lib/scratch'
+import {
+  ALTERNATIVES_NOTE,
+  MAX_AWAY_SECONDS,
+  MAX_TAB_EXITS,
+  summarizeAbsences,
+} from '../lib/examRules'
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`
@@ -28,11 +36,15 @@ export default function Results() {
   const [session, setSession] = useState<ExamSession | null>(null)
   const [showReview, setShowReview] = useState(false)
   const [topicMeta, setTopicMeta] = useState<Map<string, TopicMeta>>(new Map())
+  const [scratchMap, setScratchMap] = useState<Record<string, Scratch>>({})
 
   useEffect(() => {
     loadQuestions().then(setData)
     loadTopics().then((t) => setTopicMeta(topicLabelMap(t.topics)))
-    if (sessionId) setSession(getSession(sessionId) ?? null)
+    if (sessionId) {
+      setSession(getSession(sessionId) ?? null)
+      setScratchMap(loadScratch(sessionId))
+    }
   }, [sessionId])
 
   const questionMap = useMemo(() => {
@@ -70,6 +82,7 @@ export default function Results() {
   const pct = summary.total > 0 ? Math.round((summary.correct / summary.total) * 100) : 0
   const weakest = byTopic.filter((t) => t.rate < 1)
   const target = targetSecondsPerQuestion(session)
+  const away = summarizeAbsences(session.absences)
 
   return (
     <div className="space-y-6">
@@ -80,7 +93,37 @@ export default function Results() {
         <p className="text-gray-500 mt-1">
           {summary.correct} de {summary.total} corretas · {summary.blank} em branco
         </p>
+        <p className="text-xs text-gray-400 mt-3 max-w-xl mx-auto">{ALTERNATIVES_NOTE}</p>
       </section>
+
+      {away.count > 0 && (
+        <section
+          className={`rounded-lg p-4 border ${
+            away.wouldBeFlagged
+              ? 'bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-800'
+              : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+          }`}
+        >
+          <h2 className="font-semibold mb-1">Saidas da aba</h2>
+          <p className="text-sm">
+            {away.count} {away.count === 1 ? 'saida' : 'saidas'} durante a prova, a mais longa de{' '}
+            {away.longestSeconds}s
+            {away.overLimit > 0 && ` (${away.overLimit} acima de ${MAX_AWAY_SECONDS}s)`}.{' '}
+            {away.wouldBeFlagged ? (
+              <>
+                Esse padrao ja seria infracao na prova real, que permite no maximo{' '}
+                {MAX_AWAY_SECONDS}s fora ou {MAX_TAB_EXITS} saidas — e a punicao e eliminacao, nao
+                desconto.
+              </>
+            ) : (
+              <>
+                Ainda dentro do que a prova real tolera ({MAX_AWAY_SECONDS}s fora, {MAX_TAB_EXITS}{' '}
+                saidas), mas o habito custa caro la.
+              </>
+            )}
+          </p>
+        </section>
+      )}
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
         <h2 className="font-semibold mb-3">Desempenho por area</h2>
@@ -258,6 +301,23 @@ export default function Results() {
                 <div className="mt-2">
                   <TopicTags slugs={q.topics} topics={topicMeta} linkToAnalysis={false} />
                 </div>
+                {/* rever o proprio raciocinio ao lado do erro e o que mostra
+                    onde ele comecou -- so o gabarito nao mostra */}
+                {hasContent(scratchMap[id]) && (
+                  <details className="mt-3">
+                    <summary className="text-sm text-indigo-600 cursor-pointer">
+                      Ver seu rascunho desta questao
+                    </summary>
+                    <div className="mt-2">
+                      <ScratchPad
+                        questionKey={id}
+                        scratch={scratchMap[id]}
+                        onChange={() => {}}
+                        readOnly
+                      />
+                    </div>
+                  </details>
+                )}
               </div>
             )
           })}

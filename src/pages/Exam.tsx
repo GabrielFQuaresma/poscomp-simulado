@@ -14,6 +14,9 @@ import {
   upsertSession,
 } from '../lib/storage'
 import TopicTags from '../components/TopicTags'
+import ScratchPad from '../components/ScratchPad'
+import { EMPTY_SCRATCH, hasContent, loadScratch, saveScratch, type Scratch } from '../lib/scratch'
+import { MAX_AWAY_SECONDS, MAX_TAB_EXITS, summarizeAbsences } from '../lib/examRules'
 
 const LETTERS: AnswerLetter[] = ['A', 'B', 'C', 'D', 'E']
 
@@ -61,6 +64,10 @@ export default function Exam() {
   const [session, setSession] = useState<ExamSession | null>(null)
   const [index, setIndex] = useState(0)
   const [showAnswer, setShowAnswer] = useState(false)
+  const [scratchMap, setScratchMap] = useState<Record<string, Scratch>>({})
+  const [scratchOpen, setScratchOpen] = useState(false)
+  const [scratchFull, setScratchFull] = useState(false)
+  const [confirmingFinish, setConfirmingFinish] = useState(false)
   const elapsedRef = useRef(0)
   // interval callbacks close over stale `session` state, so we always read/write
   // through this ref to avoid clobbering responses saved between renders
@@ -80,6 +87,7 @@ export default function Exam() {
       sessionRef.current = s
       elapsedRef.current = s.elapsedSeconds
       timeRef.current = { ...s.timePerQuestion }
+      setScratchMap(loadScratch(s.id))
     }
   }, [sessionId])
 
@@ -106,6 +114,44 @@ export default function Exam() {
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, session?.finishedAt])
+
+  /* Na prova real sair da aba e monitorado: mais de 30s fora, ou 3 saidas, ja
+     e infracao (edital, item 5.7.13.1). Aqui nao ha punicao -- so o registro,
+     para o habito aparecer no relatorio antes de aparecer na prova. Vale so
+     para simulado cronometrado: em treino sem tempo, consultar material e
+     justamente o que se quer fazer. */
+  const awaySinceRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!session || session.finishedAt || !session.timeLimitSeconds) return
+
+    function leave() {
+      awaySinceRef.current ??= Date.now()
+    }
+    function comeBack() {
+      const since = awaySinceRef.current
+      awaySinceRef.current = null
+      const current = sessionRef.current
+      if (since === null || !current) return
+      const seconds = Math.round((Date.now() - since) / 1000)
+      // um clique que volta na hora nao e ausencia; contar isso so geraria ruido
+      if (seconds < 1) return
+      persist({ ...current, absences: [...current.absences, seconds] })
+    }
+    function onVisibility() {
+      if (document.hidden) leave()
+      else comeBack()
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('blur', leave)
+    window.addEventListener('focus', comeBack)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('blur', leave)
+      window.removeEventListener('focus', comeBack)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, session?.finishedAt, session?.timeLimitSeconds])
 
   const questionMap = useMemo(() => {
     if (!data) return new Map<string, Question>()
@@ -135,6 +181,13 @@ export default function Exam() {
     }
     persist(updated)
     if (session.correctionMode === 'study') setShowAnswer(true)
+  }
+
+  function updateScratch(next: Scratch) {
+    if (!session) return
+    const updated = { ...scratchMap, [questionId]: next }
+    setScratchMap(updated)
+    setScratchFull(!saveScratch(session.id, updated))
   }
 
   function toggleFlag() {
@@ -170,6 +223,9 @@ export default function Exam() {
   const answeredCount = Object.keys(session.responses).length
   const pace = paceDelta(session, elapsedRef.current, answeredCount)
   const onQuestionSeconds = timeRef.current[questionId] ?? 0
+  const away = summarizeAbsences(session.absences)
+  const blankCount = session.questionIds.length - answeredCount
+  const flaggedCount = Object.values(session.flagged).filter(Boolean).length
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-6">
@@ -185,11 +241,30 @@ export default function Exam() {
             ) : (
               <span className="font-mono text-sm text-gray-500">{formatTime(elapsedRef.current)}</span>
             )}
-            <button className="px-3 py-1.5 rounded bg-red-600 text-white text-sm" onClick={finish}>
+            <button
+              className="px-3 py-1.5 rounded bg-red-600 text-white text-sm"
+              onClick={() => setConfirmingFinish(true)}
+            >
               Finalizar prova
             </button>
           </div>
         </div>
+
+        {away.count > 0 && (
+          <div
+            className={`mb-3 text-sm rounded p-3 border ${
+              away.wouldBeFlagged
+                ? 'bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-800'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+            }`}
+          >
+            Voce saiu desta aba {away.count}{' '}
+            {away.count === 1 ? 'vez' : 'vezes'} (maior ausencia: {away.longestSeconds}s).{' '}
+            {away.wouldBeFlagged
+              ? `Na prova real isso ja seria infracao: o limite e ${MAX_AWAY_SECONDS}s fora ou ${MAX_TAB_EXITS} saidas.`
+              : `O limite na prova real e ${MAX_AWAY_SECONDS}s fora ou ${MAX_TAB_EXITS} saidas.`}
+          </div>
+        )}
 
         {question && (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
@@ -272,6 +347,45 @@ export default function Exam() {
             </div>
           </div>
         )}
+
+        {/* espaco para rascunho eletronico, como o da plataforma da prova
+            (edital POSCOMP, item 5.7.8.3.2). Fica por questao: a conta que
+            voce fez na 14 tem que estar la quando voce voltar para a 14 */}
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 mt-4">
+          <button
+            className="w-full flex items-center justify-between text-left"
+            onClick={() => setScratchOpen((v) => !v)}
+          >
+            <span className="font-semibold text-sm">
+              Rascunho
+              {hasContent(scratchMap[questionId]) && (
+                <span className="ml-2 text-xs font-normal text-indigo-600">
+                  com anotacoes nesta questao
+                </span>
+              )}
+            </span>
+            <span className="text-gray-400 text-sm">{scratchOpen ? '▾' : '▸'}</span>
+          </button>
+          {scratchOpen && (
+            <div className="mt-3">
+              <ScratchPad
+                questionKey={questionId}
+                scratch={scratchMap[questionId] ?? EMPTY_SCRATCH}
+                onChange={updateScratch}
+              />
+              {scratchFull && (
+                <p className="text-sm text-red-600 mt-2">
+                  O navegador recusou salvar: o armazenamento local encheu. Limpe desenhos antigos
+                  ou apague provas ja finalizadas para liberar espaco.
+                </p>
+              )}
+              <p className="text-xs text-gray-400 mt-2">
+                Na prova real voce tambem pode usar ate 3 folhas em branco, vistoriadas pela webcam
+                antes de comecar. Calculadora nao e permitida.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       <aside className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 h-fit">
@@ -283,12 +397,13 @@ export default function Exam() {
             const answered = !!session.responses[id]
             const isFlagged = !!session.flagged[id]
             const isCurrent = i === index
+            const scratched = hasContent(scratchMap[id])
             return (
               <button
                 key={id}
                 onClick={() => goTo(i)}
-                title={id}
-                className={`aspect-square rounded text-xs font-medium flex items-center justify-center border ${
+                title={scratched ? `${id} — tem rascunho` : id}
+                className={`relative aspect-square rounded text-xs font-medium flex items-center justify-center border ${
                   isCurrent
                     ? 'ring-2 ring-indigo-600'
                     : ''
@@ -301,11 +416,56 @@ export default function Exam() {
                 }`}
               >
                 {i + 1}
+                {scratched && (
+                  <span className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                )}
               </button>
             )
           })}
         </div>
       </aside>
+
+      {/* Na prova real, enviar e um passo obrigatorio: quem nao envia e
+          eliminado (edital, item 5.7.10.1). Confirmar aqui treina o gesto e
+          evita perder questoes em branco por clique errado. O estouro do
+          cronometro nao passa por aqui -- envia direto, como la. */}
+      {confirmingFinish && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full">
+            <h2 className="font-semibold text-lg mb-2">Enviar a prova?</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Depois de enviar nao da para voltar e responder o que ficou faltando.
+            </p>
+            <ul className="text-sm space-y-1 mb-4">
+              <li>
+                Respondidas: <strong>{answeredCount}</strong> de {session.questionIds.length}
+              </li>
+              {blankCount > 0 && (
+                <li className="text-red-600">
+                  Em branco: <strong>{blankCount}</strong> — cada uma vale 0, entao chutar sempre
+                  rende mais do que deixar vazia
+                </li>
+              )}
+              {flaggedCount > 0 && (
+                <li className="text-amber-600">
+                  Marcadas para revisao: <strong>{flaggedCount}</strong>
+                </li>
+              )}
+            </ul>
+            <div className="flex gap-3 justify-end">
+              <button
+                className="px-4 py-2 rounded border border-gray-300 dark:border-gray-700 text-sm"
+                onClick={() => setConfirmingFinish(false)}
+              >
+                Voltar a prova
+              </button>
+              <button className="px-4 py-2 rounded bg-red-600 text-white text-sm" onClick={finish}>
+                Enviar prova
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

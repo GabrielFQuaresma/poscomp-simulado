@@ -1,5 +1,4 @@
 import type { Area, AnswerLetter, CorrectionMode, ExamMode, ExamSession, Question, QuestionAttemptRecord, SrsState, TopicSrsState } from '../types'
-import { getAttempts } from './storage'
 import { DAILY_REVIEW_LIMIT, isDue, reviewSrs, reviewTopicSrs } from './srs'
 
 export function newSessionId(): string {
@@ -61,6 +60,7 @@ export function createSession(
     flagged: {},
     elapsedSeconds: 0,
     timePerQuestion: {},
+    absences: [],
   }
 }
 
@@ -82,14 +82,28 @@ const STANDARD_QUOTA: Record<Area, number> = {
 export interface RandomExamFilters {
   excludeAnnulled: boolean
   excludeAlreadyCorrect: boolean
+  /** Historico usado por excludeAlreadyCorrect. Vem de fora em vez de ser lido
+   * daqui: montar prova e decidir onde os dados moram sao responsabilidades
+   * diferentes, e so a segunda muda se o historico passar a vir de um servidor. */
+  attempts: QuestionAttemptRecord[]
 }
 
-function alreadyCorrectIds(): Set<string> {
+function alreadyCorrectIds(attempts: QuestionAttemptRecord[]): Set<string> {
   const correct = new Set<string>()
-  for (const a of getAttempts()) {
+  for (const a of attempts) {
     if (a.correct) correct.add(a.questionId)
   }
   return correct
+}
+
+function applyFilters(pool: Question[], filters: RandomExamFilters): Question[] {
+  let filtered = pool
+  if (filters.excludeAnnulled) filtered = filtered.filter((q) => !q.annulled)
+  if (filters.excludeAlreadyCorrect) {
+    const correct = alreadyCorrectIds(filters.attempts)
+    filtered = filtered.filter((q) => !correct.has(q.id))
+  }
+  return filtered
 }
 
 export function buildRandomExam(
@@ -97,12 +111,7 @@ export function buildRandomExam(
   filters: RandomExamFilters,
   opts: NewExamOptions,
 ): ExamSession {
-  let pool = questions
-  if (filters.excludeAnnulled) pool = pool.filter((q) => !q.annulled)
-  if (filters.excludeAlreadyCorrect) {
-    const correct = alreadyCorrectIds()
-    pool = pool.filter((q) => !correct.has(q.id))
-  }
+  const pool = applyFilters(questions, filters)
 
   const ids: string[] = []
   for (const [area, quota] of Object.entries(STANDARD_QUOTA) as [Area, number][]) {
@@ -120,12 +129,7 @@ export function buildAreaExam(
   filters: RandomExamFilters,
   opts: NewExamOptions,
 ): ExamSession {
-  let pool = questions.filter((q) => areas.includes(q.area))
-  if (filters.excludeAnnulled) pool = pool.filter((q) => !q.annulled)
-  if (filters.excludeAlreadyCorrect) {
-    const correct = alreadyCorrectIds()
-    pool = pool.filter((q) => !correct.has(q.id))
-  }
+  const pool = applyFilters(questions.filter((q) => areas.includes(q.area)), filters)
   const ids = shuffle(pool)
     .slice(0, count)
     .map((q) => q.id)
@@ -154,12 +158,10 @@ export function buildTopicExam(
   filters: RandomExamFilters,
   opts: NewExamOptions,
 ): ExamSession {
-  let pool = questions.filter((q) => q.topics.some((t) => topicSlugs.includes(t)))
-  if (filters.excludeAnnulled) pool = pool.filter((q) => !q.annulled)
-  if (filters.excludeAlreadyCorrect) {
-    const correct = alreadyCorrectIds()
-    pool = pool.filter((q) => !correct.has(q.id))
-  }
+  const pool = applyFilters(
+    questions.filter((q) => q.topics.some((t) => topicSlugs.includes(t))),
+    filters,
+  )
   const groups = topicSlugs.map((slug) => shuffle(pool.filter((q) => bucketOf(q, topicSlugs) === slug)))
   const ids = roundRobin(groups, count).map((q) => q.id)
   const names = topicSlugs.map((s) => topicLabels.get(s) ?? s).join(', ')

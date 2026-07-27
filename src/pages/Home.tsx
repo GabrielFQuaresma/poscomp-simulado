@@ -13,6 +13,7 @@ import {
   dueTopicSlugs,
 } from '../lib/examLogic'
 import { DAILY_REVIEW_LIMIT, daysUntilDue } from '../lib/srs'
+import { ALTERNATIVES_NOTE } from '../lib/examRules'
 import {
   deleteSession,
   exportData,
@@ -95,7 +96,7 @@ export default function Home() {
   function startRandom() {
     if (!data) return
     startSession(
-      buildRandomExam(data.questions, { excludeAnnulled, excludeAlreadyCorrect }, opts()),
+      buildRandomExam(data.questions, { excludeAnnulled, excludeAlreadyCorrect, attempts: getAttempts() }, opts()),
     )
   }
 
@@ -106,7 +107,7 @@ export default function Home() {
         data.questions,
         practiceAreas,
         practiceCount,
-        { excludeAnnulled, excludeAlreadyCorrect },
+        { excludeAnnulled, excludeAlreadyCorrect, attempts: getAttempts() },
         opts(),
       ),
     )
@@ -233,6 +234,7 @@ export default function Home() {
             Excluir ja respondidas corretamente
           </label>
         </div>
+        <p className="text-xs text-gray-400 mt-3">{ALTERNATIVES_NOTE}</p>
       </section>
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
