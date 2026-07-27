@@ -30,7 +30,7 @@ export interface TopicsData {
   topics: TopicMeta[]
 }
 
-export type ExamMode = 'year' | 'random' | 'area' | 'srs' | 'topic'
+export type ExamMode = 'year' | 'random' | 'area' | 'srs' | 'srs-topic' | 'topic'
 
 export type AnswerLetter = 'A' | 'B' | 'C' | 'D' | 'E'
 
@@ -48,6 +48,9 @@ export interface ExamSession {
   responses: Record<string, AnswerLetter | undefined>
   flagged: Record<string, boolean>
   elapsedSeconds: number
+  /** Segundos gastos em cada questao, acumulados enquanto ela esta na tela.
+   * Sessoes salvas antes desse campo existir vem sem ele. */
+  timePerQuestion: Record<string, number>
 }
 
 export interface QuestionAttemptRecord {
@@ -56,10 +59,12 @@ export interface QuestionAttemptRecord {
   timestamp: number
   answer: AnswerLetter | null
   correct: boolean
+  /** Tempo gasto nesta questao na sessao em que ela foi respondida. */
+  secondsSpent: number
 }
 
-export interface SrsState {
-  questionId: string
+/** Agendamento SM-2, comum a questoes e a temas. */
+export interface Scheduling {
   repetitions: number
   intervalDays: number
   easeFactor: number
@@ -67,9 +72,23 @@ export interface SrsState {
   lastReviewedAt: number
 }
 
+export interface SrsState extends Scheduling {
+  questionId: string
+}
+
+/** O tema e a unidade de revisao: e o tema que precisa voltar, e cada volta
+ * deve trazer uma questao diferente. O SrsState por questao vira criterio de
+ * desempate na hora de escolher qual questao do tema servir. */
+export interface TopicSrsState extends Scheduling {
+  topicSlug: string
+  /** Acerto na ultima revisao do tema, para mostrar o historico ao usuario. */
+  lastAccuracy: number
+}
+
 export interface AppData {
-  version: 1
+  version: 2
   sessions: ExamSession[]
   attempts: QuestionAttemptRecord[]
   srs: Record<string, SrsState>
+  topicSrs: Record<string, TopicSrsState>
 }

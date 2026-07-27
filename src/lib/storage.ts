@@ -1,9 +1,22 @@
-import type { AppData, ExamSession, QuestionAttemptRecord, SrsState } from '../types'
+import type { AppData, ExamSession, QuestionAttemptRecord, SrsState, TopicSrsState } from '../types'
 
 const STORAGE_KEY = 'poscomp-simulado:data'
 
 function emptyData(): AppData {
-  return { version: 1, sessions: [], attempts: [], srs: {} }
+  return { version: 2, sessions: [], attempts: [], srs: {}, topicSrs: {} }
+}
+
+/** Preenche os campos que versoes anteriores nao gravavam. Nada e descartado:
+ * o historico de quem ja usava o site continua valendo, so sem tempo por
+ * questao (que ninguem media) e sem agenda de temas (que so passa a existir
+ * conforme novas provas forem finalizadas). */
+function migrate(data: AppData): AppData {
+  data.srs ??= {}
+  data.topicSrs ??= {}
+  for (const s of data.sessions) s.timePerQuestion ??= {}
+  for (const a of data.attempts) a.secondsSpent ??= 0
+  data.version = 2
+  return data
 }
 
 export function loadData(): AppData {
@@ -12,8 +25,7 @@ export function loadData(): AppData {
   try {
     const parsed = JSON.parse(raw) as AppData
     if (!parsed.sessions || !parsed.attempts) return emptyData()
-    parsed.srs ??= {}
-    return parsed
+    return migrate(parsed)
   } catch {
     return emptyData()
   }
@@ -72,6 +84,17 @@ export function saveSrsStates(states: SrsState[]): void {
   saveData(data)
 }
 
+export function getTopicSrsMap(): Record<string, TopicSrsState> {
+  return loadData().topicSrs
+}
+
+export function saveTopicSrsStates(states: TopicSrsState[]): void {
+  if (states.length === 0) return
+  const data = loadData()
+  for (const s of states) data.topicSrs[s.topicSlug] = s
+  saveData(data)
+}
+
 export function resetAll(): void {
   localStorage.removeItem(STORAGE_KEY)
 }
@@ -112,12 +135,21 @@ export function importData(json: string): { sessions: number; attempts: number }
     }
   }
 
-  const merged: AppData = {
-    version: 1,
+  const topicSrs: Record<string, TopicSrsState> = { ...current.topicSrs }
+  for (const [slug, incomingState] of Object.entries(incoming.topicSrs ?? {})) {
+    const existing = topicSrs[slug]
+    if (!existing || incomingState.lastReviewedAt >= existing.lastReviewedAt) {
+      topicSrs[slug] = incomingState
+    }
+  }
+
+  const merged: AppData = migrate({
+    version: 2,
     sessions: Array.from(sessionMap.values()),
     attempts: Array.from(attemptMap.values()),
     srs,
-  }
+    topicSrs,
+  })
   saveData(merged)
   return { sessions: merged.sessions.length, attempts: merged.attempts.length }
 }
