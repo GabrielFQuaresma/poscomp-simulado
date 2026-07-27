@@ -61,6 +61,7 @@ export function createSession(
     flagged: {},
     elapsedSeconds: 0,
     timePerQuestion: {},
+    absences: [],
   }
 }
 

@@ -51,6 +51,9 @@ export interface ExamSession {
   /** Segundos gastos em cada questao, acumulados enquanto ela esta na tela.
    * Sessoes salvas antes desse campo existir vem sem ele. */
   timePerQuestion: Record<string, number>
+  /** Duracao em segundos de cada vez que a aba perdeu o foco durante um
+   * simulado cronometrado. Na prova real isso e monitorado e pode eliminar. */
+  absences: number[]
 }
 
 export interface QuestionAttemptRecord {
@@ -86,7 +89,7 @@ export interface TopicSrsState extends Scheduling {
 }
 
 export interface AppData {
-  version: 2
+  version: 3
   sessions: ExamSession[]
   attempts: QuestionAttemptRecord[]
   srs: Record<string, SrsState>

@@ -4,7 +4,7 @@ import { clearAllScratch, clearScratch } from './scratch'
 const STORAGE_KEY = 'poscomp-simulado:data'
 
 function emptyData(): AppData {
-  return { version: 2, sessions: [], attempts: [], srs: {}, topicSrs: {} }
+  return { version: 3, sessions: [], attempts: [], srs: {}, topicSrs: {} }
 }
 
 /** Preenche os campos que versoes anteriores nao gravavam. Nada e descartado:
@@ -14,9 +14,12 @@ function emptyData(): AppData {
 function migrate(data: AppData): AppData {
   data.srs ??= {}
   data.topicSrs ??= {}
-  for (const s of data.sessions) s.timePerQuestion ??= {}
+  for (const s of data.sessions) {
+    s.timePerQuestion ??= {}
+    s.absences ??= []
+  }
   for (const a of data.attempts) a.secondsSpent ??= 0
-  data.version = 2
+  data.version = 3
   return data
 }
 
@@ -147,7 +150,7 @@ export function importData(json: string): { sessions: number; attempts: number }
   }
 
   const merged: AppData = migrate({
-    version: 2,
+    version: 3,
     sessions: Array.from(sessionMap.values()),
     attempts: Array.from(attemptMap.values()),
     srs,
