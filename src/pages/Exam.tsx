@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { AnswerLetter, ExamSession, Question, QuestionsData } from '../types'
+import type { AnswerLetter, ExamSession, Question, QuestionsData, TopicMeta } from '../types'
 import { loadQuestions, questionImageUrl, AREA_LABELS } from '../lib/questions'
+import { loadTopics, topicLabelMap } from '../lib/topics'
 import { buildAttemptRecords, buildSrsUpdates, isCorrect } from '../lib/examLogic'
 import { addAttempts, getSession, getSrsMap, saveSrsStates, upsertSession } from '../lib/storage'
+import TopicTags from '../components/TopicTags'
 
 const LETTERS: AnswerLetter[] = ['A', 'B', 'C', 'D', 'E']
 
@@ -19,6 +21,7 @@ export default function Exam() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const navigate = useNavigate()
   const [data, setData] = useState<QuestionsData | null>(null)
+  const [topicMeta, setTopicMeta] = useState<Map<string, TopicMeta>>(new Map())
   const [session, setSession] = useState<ExamSession | null>(null)
   const [index, setIndex] = useState(0)
   const [showAnswer, setShowAnswer] = useState(false)
@@ -29,6 +32,7 @@ export default function Exam() {
 
   useEffect(() => {
     loadQuestions().then(setData)
+    loadTopics().then((t) => setTopicMeta(topicLabelMap(t.topics)))
     const s = sessionId ? getSession(sessionId) : undefined
     if (s) {
       setSession(s)
@@ -177,6 +181,13 @@ export default function Exam() {
               <p className="mt-3 text-sm text-gray-500">
                 {isCorrect(question, response) ? 'Voce acertou.' : `Voce errou. Gabarito: ${question.answer}`}
               </p>
+            )}
+            {/* so depois de corrigir: saber o tema de antemao entrega parte da
+                resposta e tiraria o realismo do simulado */}
+            {showAnswer && (
+              <div className="mt-2">
+                <TopicTags slugs={question.topics} topics={topicMeta} />
+              </div>
             )}
             <div className="flex justify-between mt-4">
               <button

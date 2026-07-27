@@ -8,6 +8,9 @@ export interface Question {
   image: string
   answer: string | null
   annulled: boolean
+  /** Topicos identificados pelo classificador do pipeline, do mais para o
+   * menos provavel. Vazio quando nenhum topico foi reconhecido. */
+  topics: string[]
 }
 
 export interface QuestionsData {
@@ -16,9 +19,21 @@ export interface QuestionsData {
   questions: Question[]
 }
 
+export interface TopicMeta {
+  slug: string
+  label: string
+  area: Area
+}
+
+export interface TopicsData {
+  generated_at: string
+  topics: TopicMeta[]
+}
+
+export type ExamMode = 'year' | 'random' | 'area' | 'srs' | 'topic'
+
 export type AnswerLetter = 'A' | 'B' | 'C' | 'D' | 'E'
 
-export type ExamMode = 'year' | 'random' | 'area' | 'srs'
 export type CorrectionMode = 'exam' | 'study'
 
 export interface ExamSession {

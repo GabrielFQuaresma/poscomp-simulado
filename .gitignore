@@ -9,3 +9,8 @@ pipeline/.venv/
 pipeline/__pycache__/
 pipeline/**/__pycache__/
 pipeline/qa/
+
+# classify.py working output: per-question extracted text + incidence report,
+# regenerated on every run and only used to review the classifier's decisions
+pipeline/text/
+pipeline/topics_report.txt

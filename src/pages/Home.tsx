@@ -211,6 +211,20 @@ export default function Home() {
       </section>
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+        <h2 className="font-semibold mb-1">Pratica por tema</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Veja quanto cada tema caiu nas {data.years.length} provas ja aplicadas, cruzado com o seu
+          desempenho, e treine os que mais valem pontos.
+        </p>
+        <button
+          className="px-4 py-2 rounded bg-indigo-600 text-white font-medium"
+          onClick={() => navigate('/topicos')}
+        >
+          Ver analise de temas
+        </button>
+      </section>
+
+      <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
         <h2 className="font-semibold mb-3">Pratica por area</h2>
         <div className="flex flex-wrap gap-4 items-center text-sm mb-3">
           {(Object.keys(AREA_LABELS) as Area[])

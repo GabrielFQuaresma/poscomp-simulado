@@ -110,6 +110,30 @@ export function buildAreaExam(
   return createSession('area', label, ids, opts)
 }
 
+/** Pratica focada em um topico. Inclui questoes em que o topico e secundario:
+ * quem quer treinar recorrencia tambem se beneficia da questao de complexidade
+ * que exige resolver uma recorrencia no meio. */
+export function buildTopicExam(
+  questions: Question[],
+  topicSlugs: string[],
+  topicLabels: Map<string, string>,
+  count: number,
+  filters: RandomExamFilters,
+  opts: NewExamOptions,
+): ExamSession {
+  let pool = questions.filter((q) => q.topics.some((t) => topicSlugs.includes(t)))
+  if (filters.excludeAnnulled) pool = pool.filter((q) => !q.annulled)
+  if (filters.excludeAlreadyCorrect) {
+    const correct = alreadyCorrectIds()
+    pool = pool.filter((q) => !correct.has(q.id))
+  }
+  const ids = shuffle(pool)
+    .slice(0, count)
+    .map((q) => q.id)
+  const names = topicSlugs.map((s) => topicLabels.get(s) ?? s).join(', ')
+  return createSession('topic', `Topico: ${names} (${ids.length}q)`, ids, opts)
+}
+
 /** Questoes com revisao vencida (dueAt <= now), das mais atrasadas para as
  * menos atrasadas, para priorizar o que esta ha mais tempo esperando. */
 export function dueSrsQuestions(questions: Question[], srsMap: Record<string, SrsState>, now: number): Question[] {

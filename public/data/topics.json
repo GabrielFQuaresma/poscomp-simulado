@@ -1,0 +1,155 @@
+{
+  "generated_at": "2026-07-26",
+  "topics": [
+    {
+      "slug": "logica",
+      "label": "Logica Matematica",
+      "area": "matematica"
+    },
+    {
+      "slug": "conjuntos-relacoes-funcoes",
+      "label": "Conjuntos, Relacoes e Funcoes",
+      "area": "matematica"
+    },
+    {
+      "slug": "inducao-recorrencia",
+      "label": "Inducao e Recorrencias",
+      "area": "matematica"
+    },
+    {
+      "slug": "combinatoria",
+      "label": "Analise Combinatoria",
+      "area": "matematica"
+    },
+    {
+      "slug": "probabilidade-estatistica",
+      "label": "Probabilidade e Estatistica",
+      "area": "matematica"
+    },
+    {
+      "slug": "algebra-linear",
+      "label": "Algebra Linear",
+      "area": "matematica"
+    },
+    {
+      "slug": "calculo",
+      "label": "Calculo Diferencial e Integral",
+      "area": "matematica"
+    },
+    {
+      "slug": "geometria-analitica",
+      "label": "Geometria Analitica",
+      "area": "matematica"
+    },
+    {
+      "slug": "grafos",
+      "label": "Teoria dos Grafos",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "estruturas-de-dados",
+      "label": "Estruturas de Dados",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "ordenacao-busca",
+      "label": "Ordenacao e Busca",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "complexidade",
+      "label": "Analise de Algoritmos e Complexidade",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "teoria-computacao",
+      "label": "Linguagens Formais, Automatos e Computabilidade",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "arquitetura-computadores",
+      "label": "Arquitetura e Organizacao de Computadores",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "circuitos-digitais",
+      "label": "Circuitos Digitais",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "linguagens-programacao",
+      "label": "Linguagens de Programacao",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "programacao-algoritmos",
+      "label": "Programacao e Pseudocodigo",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "engenharia-software",
+      "label": "Engenharia de Software",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "banco-de-dados",
+      "label": "Banco de Dados",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "sistemas-operacionais",
+      "label": "Sistemas Operacionais",
+      "area": "fundamentos"
+    },
+    {
+      "slug": "redes-computadores",
+      "label": "Redes de Computadores",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "sistemas-distribuidos",
+      "label": "Sistemas Distribuidos e Computacao Paralela",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "compiladores",
+      "label": "Compiladores",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "computacao-grafica",
+      "label": "Computacao Grafica",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "processamento-imagens",
+      "label": "Processamento de Imagens",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "inteligencia-artificial",
+      "label": "Inteligencia Artificial",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "ihc",
+      "label": "Interacao Humano-Computador",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "sistemas-informacao",
+      "label": "Sistemas de Informacao",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "seguranca-informacao",
+      "label": "Seguranca da Informacao",
+      "area": "tecnologia"
+    },
+    {
+      "slug": "web-sistemas-web",
+      "label": "Desenvolvimento Web",
+      "area": "tecnologia"
+    }
+  ]
+}

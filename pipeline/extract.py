@@ -8,6 +8,10 @@ pairs it with the answer key extracted from the gabarito PDFs. Produces:
   - pipeline/qa/index.html (visual contact sheet for review)
 
 Run: .venv/Scripts/python.exe extract.py [--years 2019,2022] [--no-qa]
+
+The per-question "topics" field is produced by classify.py, not here; existing
+values are carried over so a re-run never drops them, but run classify.py after
+adding a new year so its questions get classified too.
 """
 from __future__ import annotations
 
@@ -51,9 +55,22 @@ AREA_RANGES = [
     (51, 70, "tecnologia"),
 ]
 
+# Up to 2007 the exam gave Fundamentos only 20 questions and Tecnologia 30.
+# The 2006/2007 cadernos state this outright by tagging every question "mt",
+# "fu" or "te"; 2004/2005 carry no tag but their questions 41-50 are just as
+# clearly Tecnologia (banco de dados, redes, IA). Getting this wrong silently
+# files 40 Tecnologia questions under Fundamentos.
+LEGACY_AREA_RANGES = [
+    (1, 20, "matematica"),
+    (21, 40, "fundamentos"),
+    (41, 70, "tecnologia"),
+]
+LAST_LEGACY_YEAR = 2007
 
-def area_for(number: int) -> str:
-    for lo, hi, name in AREA_RANGES:
+
+def area_for(number: int, year: int) -> str:
+    ranges = LEGACY_AREA_RANGES if year <= LAST_LEGACY_YEAR else AREA_RANGES
+    for lo, hi, name in ranges:
         if lo <= number <= hi:
             return name
     return "desconhecida"
@@ -486,7 +503,7 @@ def extract_section(cfg: YearConfig, section: CadernoSection) -> list[QuestionRe
             print(f"[WARN] {cfg.year} q{anchor.number:02d}: suspiciously short crop ({img.height}px)", file=sys.stderr)
         if img.height > 2500:
             print(f"[WARN] {cfg.year} q{anchor.number:02d}: suspiciously tall crop ({img.height}px)", file=sys.stderr)
-        area = section.area or area_for(anchor.number)
+        area = section.area or area_for(anchor.number, cfg.year)
         records.append(QuestionRecord(number=anchor.number, image=img, area=area))
     doc.close()
     return records
@@ -656,7 +673,21 @@ def build_qa_page(all_questions: list[dict]) -> None:
     (QA_DIR / "index.html").write_text("\n".join(html), encoding="utf-8")
 
 
+def load_existing_topics() -> dict[str, list[str]]:
+    """Topics live in questions.json but are produced by classify.py, not here.
+    Carrying them over means re-running this script never silently throws away
+    the classification (which only a separate, slower run could rebuild)."""
+    if not OUT_DATA.exists():
+        return {}
+    try:
+        data = json.loads(OUT_DATA.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return {q["id"]: q["topics"] for q in data.get("questions", []) if q.get("topics")}
+
+
 def run(years: list[int]) -> None:
+    existing_topics = load_existing_topics()
     all_questions: list[dict] = []
     for year in years:
         cfg = YEAR_CONFIGS.get(year)
@@ -682,14 +713,16 @@ def run(years: list[int]) -> None:
 
         for r in records:
             ans = answers.get(r.number, {"answer": None, "annulled": False})
+            qid = f"{year}-{r.number:02d}"
             all_questions.append({
-                "id": f"{year}-{r.number:02d}",
+                "id": qid,
                 "year": year,
                 "number": r.number,
                 "area": r.area,
                 "image": f"questions/{year}/q{r.number:02d}.webp",
                 "answer": ans["answer"],
                 "annulled": ans["annulled"],
+                "topics": existing_topics.get(qid, []),
             })
 
     OUT_DATA.parent.mkdir(parents=True, exist_ok=True)
