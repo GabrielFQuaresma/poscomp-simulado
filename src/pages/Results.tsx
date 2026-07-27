@@ -3,14 +3,23 @@ import { useParams, Link } from 'react-router-dom'
 import type { ExamSession, Question, QuestionsData, TopicMeta } from '../types'
 import { loadQuestions, questionImageUrl, AREA_LABELS } from '../lib/questions'
 import { loadTopics, topicLabelMap } from '../lib/topics'
-import { isCorrect, scoreSession } from '../lib/examLogic'
+import { isCorrect, pacingSummary, scoreSession, targetSecondsPerQuestion } from '../lib/examLogic'
 import { getSession } from '../lib/storage'
 import TopicTags from '../components/TopicTags'
 
 function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   return h > 0 ? `${h}h${String(m).padStart(2, '0')}min` : `${m}min`
+}
+
+/** Tempo curto no formato "3min26s", que e como se pensa em ritmo de prova. */
+function formatPace(seconds: number): string {
+  const s = Math.round(seconds)
+  const m = Math.floor(s / 60)
+  const rest = s % 60
+  return m > 0 ? `${m}min${String(rest).padStart(2, '0')}s` : `${rest}s`
 }
 
 export default function Results() {
@@ -50,11 +59,17 @@ export default function Results() {
       .sort((a, b) => a.rate - b.rate || b.total - a.total)
   }, [session, questionMap])
 
+  const pacing = useMemo(
+    () => (session ? pacingSummary(session, questionMap) : null),
+    [session, questionMap],
+  )
+
   if (!data || !session) return <p>Carregando...</p>
 
   const summary = scoreSession(session, questionMap)
   const pct = summary.total > 0 ? Math.round((summary.correct / summary.total) * 100) : 0
   const weakest = byTopic.filter((t) => t.rate < 1)
+  const target = targetSecondsPerQuestion(session)
 
   return (
     <div className="space-y-6">
@@ -86,6 +101,90 @@ export default function Results() {
           ))}
         </div>
       </section>
+
+      {pacing && (
+        <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+          <h2 className="font-semibold mb-1">Ritmo</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            {target !== null ? (
+              <>
+                Voce gastou <strong>{formatPace(pacing.averageSeconds)}</strong> por questao, contra{' '}
+                <strong>{formatPace(target)}</strong> disponiveis por questao neste formato.
+              </>
+            ) : (
+              <>
+                Voce gastou <strong>{formatPace(pacing.averageSeconds)}</strong> por questao. Sem
+                limite de tempo nesta sessao, entao nao ha ritmo alvo a comparar.
+              </>
+            )}
+          </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center mb-4">
+            <div className="border border-gray-200 dark:border-gray-800 rounded p-3">
+              <div className="text-xs text-gray-500">Media</div>
+              <div className="font-semibold">{formatPace(pacing.averageSeconds)}</div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-800 rounded p-3">
+              <div className="text-xs text-gray-500">Nas que acertou</div>
+              <div className="font-semibold">
+                {pacing.averageCorrect !== null ? formatPace(pacing.averageCorrect) : '—'}
+              </div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-800 rounded p-3">
+              <div className="text-xs text-gray-500">Nas que errou</div>
+              <div className="font-semibold">
+                {pacing.averageIncorrect !== null ? formatPace(pacing.averageIncorrect) : '—'}
+              </div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-800 rounded p-3">
+              <div className="text-xs text-gray-500">Tempo medido</div>
+              <div className="font-semibold">{formatDuration(pacing.totalSeconds)}</div>
+            </div>
+          </div>
+
+          {/* o padrao que vale ouro: se as erradas consomem mais tempo que as
+              certas, o problema nao e conteudo, e saber a hora de desistir.
+              So vale avisar quando a diferenca e grande em minutos tambem:
+              proporcao sozinha dispara com segundos de diferenca e vira ruido */}
+          {pacing.averageCorrect !== null &&
+            pacing.averageIncorrect !== null &&
+            pacing.averageIncorrect > pacing.averageCorrect * 1.2 &&
+            pacing.averageIncorrect - pacing.averageCorrect >= 60 && (
+              <p className="text-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded p-3 mb-4">
+                Voce gastou{' '}
+                {Math.round((pacing.averageIncorrect / pacing.averageCorrect - 1) * 100)}% mais
+                tempo nas questoes que errou do que nas que acertou. Esse tempo saiu de questoes
+                que voce resolveria — treine abandonar mais cedo e voltar depois.
+              </p>
+            )}
+
+          <h3 className="text-sm font-medium mb-2">Questoes mais demoradas</h3>
+          <ul className="space-y-1.5">
+            {pacing.slowest.map(({ question, seconds, correct }) => (
+              <li key={question.id} className="flex items-center gap-3 text-sm">
+                <span className="w-32 shrink-0 text-gray-500">
+                  {question.year} · Q{question.number}
+                </span>
+                <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-sm h-4 overflow-hidden">
+                  <div
+                    className={`h-4 rounded-sm ${correct ? 'bg-emerald-500' : 'bg-red-500'}`}
+                    style={{ width: `${(seconds / pacing.slowest[0].seconds) * 100}%` }}
+                  />
+                </div>
+                <span className="tabular-nums w-20 text-right text-gray-500">
+                  {formatPace(seconds)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {pacing.measured < session.questionIds.length && (
+            <p className="text-xs text-gray-400 mt-3">
+              {session.questionIds.length - pacing.measured} questoes sem tempo registrado (nunca
+              abertas, ou respondidas antes do site passar a medir).
+            </p>
+          )}
+        </section>
+      )}
 
       {weakest.length > 0 && (
         <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">

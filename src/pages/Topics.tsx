@@ -146,13 +146,13 @@ export default function Topics() {
     setSelected((prev) => (prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]))
   }
 
-  function startPractice(correctionMode: CorrectionMode) {
-    if (!data || selected.length === 0) return
+  function startPractice(correctionMode: CorrectionMode, slugs: string[] = selected, count = practiceCount) {
+    if (!data || slugs.length === 0) return
     const session = buildTopicExam(
       data.questions,
-      selected,
+      slugs,
       topicLabels,
-      practiceCount,
+      count,
       { excludeAnnulled: true, excludeAlreadyCorrect: false },
       { correctionMode, timeLimitSeconds: null },
     )
@@ -209,6 +209,20 @@ export default function Topics() {
             questoes em jogo hoje.
           </p>
         )}
+        {/* treinar os tres de uma vez, alternando, e melhor do que tres blocos
+            seguidos: a prova nunca avisa de que assunto e a proxima questao */}
+        <div className="flex flex-wrap items-center gap-3 mt-4">
+          <button
+            className="px-4 py-2 rounded bg-indigo-600 text-white font-medium text-sm disabled:opacity-50"
+            disabled={top3.length === 0}
+            onClick={() => startPractice('study', top3.map((s) => s.meta.slug), 21)}
+          >
+            Treinar os tres intercalados (21q)
+          </button>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Alterna entre os tres temas, sem duas questoes seguidas do mesmo.
+          </span>
+        </div>
       </section>
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
@@ -395,6 +409,8 @@ export default function Topics() {
           {selected.length === 0
             ? 'Marque os temas na tabela acima para montar um treino focado.'
             : `${selected.length} ${selected.length === 1 ? 'tema' : 'temas'} · ${selectedPoolSize} questoes disponiveis.`}
+          {selected.length > 1 &&
+            ' Os temas entram alternados e em partes iguais, sem duas questoes seguidas do mesmo.'}
         </p>
         <div className="flex flex-wrap gap-3 items-center">
           <label className="flex items-center gap-2 text-sm">

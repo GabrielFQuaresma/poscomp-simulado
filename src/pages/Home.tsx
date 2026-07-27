@@ -2,18 +2,24 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Area, CorrectionMode, QuestionsData } from '../types'
 import { loadQuestions, AREA_LABELS } from '../lib/questions'
+import { loadTopics } from '../lib/topics'
 import {
   buildAreaExam,
   buildRandomExam,
   buildSrsExam,
+  buildTopicSrsExam,
   buildYearExam,
   dueSrsQuestions,
+  dueTopicSlugs,
 } from '../lib/examLogic'
+import { DAILY_REVIEW_LIMIT, daysUntilDue } from '../lib/srs'
 import {
   deleteSession,
   exportData,
+  getAttempts,
   getInProgressSessions,
   getSrsMap,
+  getTopicSrsMap,
   importData,
   resetAll,
   upsertSession,
@@ -29,6 +35,10 @@ export default function Home() {
   const [inProgress, setInProgress] = useState<ExamSession[]>([])
   const [dueCount, setDueCount] = useState(0)
   const [trackedCount, setTrackedCount] = useState(0)
+  const [topicLabels, setTopicLabels] = useState<Map<string, string>>(new Map())
+  const [dueTopics, setDueTopics] = useState<string[]>([])
+  const [scheduledTopics, setScheduledTopics] = useState(0)
+  const [nextTopicInDays, setNextTopicInDays] = useState<number | null>(null)
 
   const [correctionMode, setCorrectionMode] = useState<CorrectionMode>('exam')
   const [timerEnabled, setTimerEnabled] = useState(true)
@@ -42,12 +52,24 @@ export default function Home() {
   const [importMsg, setImportMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    loadQuestions()
-      .then((d) => {
+    Promise.all([loadQuestions(), loadTopics()])
+      .then(([d, t]) => {
         setData(d)
+        setTopicLabels(new Map(t.topics.map((x) => [x.slug, x.label])))
+
+        const now = Date.now()
         const srsMap = getSrsMap()
-        setDueCount(dueSrsQuestions(d.questions, srsMap, Date.now()).length)
+        setDueCount(dueSrsQuestions(d.questions, srsMap, now).length)
         setTrackedCount(Object.keys(srsMap).length)
+
+        const topicMap = getTopicSrsMap()
+        const scheduled = Object.values(topicMap)
+        setScheduledTopics(scheduled.length)
+        setDueTopics(dueTopicSlugs(topicMap, now).map((s) => s.topicSlug))
+        const upcoming = scheduled
+          .filter((s) => s.dueAt > now)
+          .sort((a, b) => a.dueAt - b.dueAt)[0]
+        setNextTopicInDays(upcoming ? daysUntilDue(upcoming, now) : null)
       })
       .catch((e) => setError(String(e)))
     setInProgress(getInProgressSessions())
@@ -90,9 +112,20 @@ export default function Home() {
     )
   }
 
+  /** Revisao sempre corrige na hora e sem cronometro: o ponto e o feedback
+   * imediato depois de tentar lembrar, nao simular a pressao da prova. */
+  const reviewOpts = { correctionMode: 'study' as CorrectionMode, timeLimitSeconds: null }
+
+  function startTopicReview() {
+    if (!data) return
+    startSession(
+      buildTopicSrsExam(data.questions, getTopicSrsMap(), getAttempts(), topicLabels, reviewOpts),
+    )
+  }
+
   function startSrsReview() {
     if (!data) return
-    startSession(buildSrsExam(data.questions, getSrsMap(), { ...opts(), timeLimitSeconds: null }))
+    startSession(buildSrsExam(data.questions, getSrsMap(), reviewOpts))
   }
 
   function handleExport() {
@@ -266,18 +299,65 @@ export default function Home() {
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
         <h2 className="font-semibold mb-1">Revisao espacada</h2>
-        <p className="text-sm text-gray-500 mb-3">
-          {trackedCount === 0
-            ? 'Responda questoes em qualquer modo para comecar a agenda de revisao (algoritmo SM-2, tipo Anki).'
-            : `${dueCount} de ${trackedCount} questoes acompanhadas estao com revisao vencida hoje. Quem voce erra volta amanha; quem acerta espaca cada vez mais.`}
-        </p>
-        <button
-          className="px-4 py-2 rounded bg-indigo-600 text-white font-medium disabled:opacity-50"
-          disabled={dueCount === 0}
-          onClick={startSrsReview}
-        >
-          Revisar {dueCount > 0 ? `${dueCount} questoes` : 'agora'}
-        </button>
+        {scheduledTopics === 0 ? (
+          <p className="text-sm text-gray-500 mb-3">
+            Termine qualquer prova para montar a agenda. Cada tema que aparecer entra no calendario
+            (algoritmo SM-2, tipo Anki): o que voce errar volta amanha, o que acertar espaca cada
+            vez mais.
+          </p>
+        ) : dueTopics.length === 0 ? (
+          <p className="text-sm text-gray-500 mb-3">
+            Nenhum tema vencido — {scheduledTopics} na agenda
+            {nextTopicInDays !== null && (
+              <>
+                , o proximo em {nextTopicInDays} {nextTopicInDays === 1 ? 'dia' : 'dias'}
+              </>
+            )}
+            . Revisar antes da hora custa tempo e rende pouco; use o dia para tema novo.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-gray-500 mb-2">
+              <strong>
+                {dueTopics.length} {dueTopics.length === 1 ? 'tema vencido' : 'temas vencidos'}
+              </strong>{' '}
+              de {scheduledTopics} na agenda. A revisao traz questoes <strong>ineditas</strong> de
+              cada tema, intercaladas, com no maximo {DAILY_REVIEW_LIMIT} por sessao.
+            </p>
+            <p className="text-xs text-gray-400 mb-3">
+              {dueTopics
+                .slice(0, 6)
+                .map((slug) => topicLabels.get(slug) ?? slug)
+                .join(' · ')}
+              {dueTopics.length > 6 && ` · +${dueTopics.length - 6}`}
+            </p>
+          </>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            className="px-4 py-2 rounded bg-indigo-600 text-white font-medium disabled:opacity-50"
+            disabled={dueTopics.length === 0}
+            onClick={startTopicReview}
+          >
+            Revisar temas
+          </button>
+          {dueCount > 0 && (
+            <button
+              className="px-4 py-2 rounded border border-gray-300 dark:border-gray-700 text-sm"
+              onClick={startSrsReview}
+              title="Reapresenta as questoes exatas que voce ja respondeu, para conferir se a duvida pontual foi resolvida"
+            >
+              Rever as mesmas questoes ({Math.min(dueCount, DAILY_REVIEW_LIMIT)}
+              {dueCount > DAILY_REVIEW_LIMIT && ` de ${dueCount}`})
+            </button>
+          )}
+        </div>
+        {trackedCount > 0 && (
+          <p className="text-xs text-gray-400 mt-3">
+            Revisar o <strong>tema</strong> e o modo principal: com {trackedCount} questoes ja
+            respondidas, reencontrar a mesma imagem testa a memoria daquela questao, nao o assunto.
+          </p>
+        )}
       </section>
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
