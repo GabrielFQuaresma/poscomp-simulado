@@ -153,7 +153,7 @@ export default function Topics() {
       slugs,
       topicLabels,
       count,
-      { excludeAnnulled: true, excludeAlreadyCorrect: false },
+      { excludeAnnulled: true, excludeAlreadyCorrect: false, attempts },
       { correctionMode, timeLimitSeconds: null },
     )
     upsertSession(session)

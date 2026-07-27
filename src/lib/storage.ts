@@ -23,19 +23,34 @@ function migrate(data: AppData): AppData {
   return data
 }
 
+/** Copia em memoria do que esta no localStorage. Sem ela, cada getter reparseia
+ * o blob inteiro -- a tela de estatisticas sozinha chama tres getters por
+ * render, ou seja, tres parses de algo que passa de 1 MB depois de algumas
+ * dezenas de simulados. Toda escrita passa por saveData, entao invalidar ali
+ * basta; outra aba do mesmo site avisa pelo evento `storage`. */
+let cache: AppData | null = null
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY || e.key === null) cache = null
+  })
+}
+
 export function loadData(): AppData {
+  if (cache) return cache
   const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return emptyData()
+  if (!raw) return (cache = emptyData())
   try {
     const parsed = JSON.parse(raw) as AppData
-    if (!parsed.sessions || !parsed.attempts) return emptyData()
-    return migrate(parsed)
+    if (!parsed.sessions || !parsed.attempts) return (cache = emptyData())
+    return (cache = migrate(parsed))
   } catch {
-    return emptyData()
+    return (cache = emptyData())
   }
 }
 
 export function saveData(data: AppData): void {
+  cache = data
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 
@@ -101,6 +116,7 @@ export function saveTopicSrsStates(states: TopicSrsState[]): void {
 }
 
 export function resetAll(): void {
+  cache = null
   localStorage.removeItem(STORAGE_KEY)
   clearAllScratch()
 }

@@ -96,7 +96,7 @@ export default function Home() {
   function startRandom() {
     if (!data) return
     startSession(
-      buildRandomExam(data.questions, { excludeAnnulled, excludeAlreadyCorrect }, opts()),
+      buildRandomExam(data.questions, { excludeAnnulled, excludeAlreadyCorrect, attempts: getAttempts() }, opts()),
     )
   }
 
@@ -107,7 +107,7 @@ export default function Home() {
         data.questions,
         practiceAreas,
         practiceCount,
-        { excludeAnnulled, excludeAlreadyCorrect },
+        { excludeAnnulled, excludeAlreadyCorrect, attempts: getAttempts() },
         opts(),
       ),
     )
