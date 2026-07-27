@@ -6,6 +6,8 @@ import { loadTopics, topicLabelMap } from '../lib/topics'
 import { isCorrect, pacingSummary, scoreSession, targetSecondsPerQuestion } from '../lib/examLogic'
 import { getSession } from '../lib/storage'
 import TopicTags from '../components/TopicTags'
+import ScratchPad from '../components/ScratchPad'
+import { hasContent, loadScratch, type Scratch } from '../lib/scratch'
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`
@@ -28,11 +30,15 @@ export default function Results() {
   const [session, setSession] = useState<ExamSession | null>(null)
   const [showReview, setShowReview] = useState(false)
   const [topicMeta, setTopicMeta] = useState<Map<string, TopicMeta>>(new Map())
+  const [scratchMap, setScratchMap] = useState<Record<string, Scratch>>({})
 
   useEffect(() => {
     loadQuestions().then(setData)
     loadTopics().then((t) => setTopicMeta(topicLabelMap(t.topics)))
-    if (sessionId) setSession(getSession(sessionId) ?? null)
+    if (sessionId) {
+      setSession(getSession(sessionId) ?? null)
+      setScratchMap(loadScratch(sessionId))
+    }
   }, [sessionId])
 
   const questionMap = useMemo(() => {
@@ -258,6 +264,23 @@ export default function Results() {
                 <div className="mt-2">
                   <TopicTags slugs={q.topics} topics={topicMeta} linkToAnalysis={false} />
                 </div>
+                {/* rever o proprio raciocinio ao lado do erro e o que mostra
+                    onde ele comecou -- so o gabarito nao mostra */}
+                {hasContent(scratchMap[id]) && (
+                  <details className="mt-3">
+                    <summary className="text-sm text-indigo-600 cursor-pointer">
+                      Ver seu rascunho desta questao
+                    </summary>
+                    <div className="mt-2">
+                      <ScratchPad
+                        questionKey={id}
+                        scratch={scratchMap[id]}
+                        onChange={() => {}}
+                        readOnly
+                      />
+                    </div>
+                  </details>
+                )}
               </div>
             )
           })}

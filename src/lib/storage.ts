@@ -1,4 +1,5 @@
 import type { AppData, ExamSession, QuestionAttemptRecord, SrsState, TopicSrsState } from '../types'
+import { clearAllScratch, clearScratch } from './scratch'
 
 const STORAGE_KEY = 'poscomp-simulado:data'
 
@@ -47,6 +48,7 @@ export function deleteSession(sessionId: string): void {
   const data = loadData()
   data.sessions = data.sessions.filter((s) => s.id !== sessionId)
   saveData(data)
+  clearScratch(sessionId)
 }
 
 export function getSession(sessionId: string): ExamSession | undefined {
@@ -97,6 +99,7 @@ export function saveTopicSrsStates(states: TopicSrsState[]): void {
 
 export function resetAll(): void {
   localStorage.removeItem(STORAGE_KEY)
+  clearAllScratch()
 }
 
 export function exportData(): string {
