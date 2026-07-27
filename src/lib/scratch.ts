@@ -17,6 +17,14 @@ export function hasContent(scratch: Scratch | undefined): boolean {
   return !!scratch && (scratch.text.trim().length > 0 || scratch.drawing.length > 0)
 }
 
+/** A sincronia se inscreve aqui para saber que um rascunho mudou. Sem ela
+ * configurada, o custo e uma chamada a um campo nulo por gravacao. */
+let onChange: ((sessionId: string) => void) | null = null
+
+export function setScratchListener(fn: ((sessionId: string) => void) | null): void {
+  onChange = fn
+}
+
 export function loadScratch(sessionId: string): Record<string, Scratch> {
   const raw = localStorage.getItem(PREFIX + sessionId)
   if (!raw) return {}
@@ -30,6 +38,18 @@ export function loadScratch(sessionId: string): Record<string, Scratch> {
 /** Retorna false quando o navegador recusou por falta de espaco, para a tela
  * poder avisar em vez de perder o rascunho silenciosamente. */
 export function saveScratch(sessionId: string, map: Record<string, Scratch>): boolean {
+  if (!write(sessionId, map)) return false
+  onChange?.(sessionId)
+  return true
+}
+
+/** Grava o rascunho que veio da nuvem sem avisar a sincronia: se avisasse,
+ * agendaria o envio de volta do que acabou de ser baixado. */
+export function applyRemoteScratch(sessionId: string, map: Record<string, Scratch>): void {
+  write(sessionId, map)
+}
+
+function write(sessionId: string, map: Record<string, Scratch>): boolean {
   const kept = Object.fromEntries(Object.entries(map).filter(([, s]) => hasContent(s)))
   try {
     if (Object.keys(kept).length === 0) localStorage.removeItem(PREFIX + sessionId)

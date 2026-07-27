@@ -26,6 +26,8 @@ import {
   upsertSession,
 } from '../lib/storage'
 import type { ExamSession } from '../types'
+import SyncPanel from '../components/SyncPanel'
+import { useSyncState } from '../lib/useSync'
 
 const FOUR_HOURS = 4 * 60 * 60
 
@@ -52,29 +54,36 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importMsg, setImportMsg] = useState<string | null>(null)
 
+  const sync = useSyncState()
+
   useEffect(() => {
     Promise.all([loadQuestions(), loadTopics()])
       .then(([d, t]) => {
         setData(d)
         setTopicLabels(new Map(t.topics.map((x) => [x.slug, x.label])))
-
-        const now = Date.now()
-        const srsMap = getSrsMap()
-        setDueCount(dueSrsQuestions(d.questions, srsMap, now).length)
-        setTrackedCount(Object.keys(srsMap).length)
-
-        const topicMap = getTopicSrsMap()
-        const scheduled = Object.values(topicMap)
-        setScheduledTopics(scheduled.length)
-        setDueTopics(dueTopicSlugs(topicMap, now).map((s) => s.topicSlug))
-        const upcoming = scheduled
-          .filter((s) => s.dueAt > now)
-          .sort((a, b) => a.dueAt - b.dueAt)[0]
-        setNextTopicInDays(upcoming ? daysUntilDue(upcoming, now) : null)
       })
       .catch((e) => setError(String(e)))
-    setInProgress(getInProgressSessions())
   }, [])
+
+  /* Tudo que sai do progresso salvo e recalculado tambem quando a sincronia
+     termina: sem isto, a prova finalizada no celular so apareceria aqui depois
+     de recarregar a pagina na mao. */
+  useEffect(() => {
+    if (!data) return
+    const now = Date.now()
+    const srsMap = getSrsMap()
+    setDueCount(dueSrsQuestions(data.questions, srsMap, now).length)
+    setTrackedCount(Object.keys(srsMap).length)
+
+    const topicMap = getTopicSrsMap()
+    const scheduled = Object.values(topicMap)
+    setScheduledTopics(scheduled.length)
+    setDueTopics(dueTopicSlugs(topicMap, now).map((s) => s.topicSlug))
+    const upcoming = scheduled.filter((s) => s.dueAt > now).sort((a, b) => a.dueAt - b.dueAt)[0]
+    setNextTopicInDays(upcoming ? daysUntilDue(upcoming, now) : null)
+
+    setInProgress(getInProgressSessions())
+  }, [data, sync.lastSyncedAt])
 
   function opts() {
     return {
@@ -156,7 +165,11 @@ export default function Home() {
   }
 
   function handleReset() {
-    if (!confirm('Isso vai apagar todo o progresso salvo neste navegador. Continuar?')) return
+    const warning =
+      sync.phase === 'idle' || sync.phase === 'syncing' || sync.phase === 'error'
+        ? 'Isso vai apagar todo o progresso: neste navegador e na sua conta, ou seja, tambem nos outros dispositivos. Continuar?'
+        : 'Isso vai apagar todo o progresso salvo neste navegador. Continuar?'
+    if (!confirm(warning)) return
     resetAll()
     setInProgress([])
     setImportMsg(null)
@@ -376,6 +389,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <SyncPanel />
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
         <h2 className="font-semibold mb-3">Progresso</h2>

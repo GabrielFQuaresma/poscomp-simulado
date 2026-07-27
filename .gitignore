@@ -3,6 +3,11 @@ dist/
 .DS_Store
 *.log
 
+# credenciais do Supabase. A chave anonima e publica por design (vai no bundle
+# de qualquer forma; quem protege os dados e o RLS), mas manter fora do repo
+# evita que ela seja usada como se fosse segredo em outro contexto.
+.env*.local
+
 # pipeline working area (source PDFs cloned locally, not committed)
 pipeline/source/
 pipeline/.venv/

@@ -54,6 +54,11 @@ export interface ExamSession {
   /** Duracao em segundos de cada vez que a aba perdeu o foco durante um
    * simulado cronometrado. Na prova real isso e monitorado e pode eliminar. */
   absences: number[]
+  /** Instante da ultima gravacao desta sessao. E o criterio de desempate da
+   * sincronia: sem ele, uma prova em andamento so teria o createdAt, que nunca
+   * muda, e a copia velha de outro dispositivo poderia sobrescrever a nova.
+   * Ausente nas sessoes gravadas antes da sincronia existir. */
+  updatedAt?: number
 }
 
 export interface QuestionAttemptRecord {
@@ -89,9 +94,13 @@ export interface TopicSrsState extends Scheduling {
 }
 
 export interface AppData {
-  version: 3
+  version: 4
   sessions: ExamSession[]
   attempts: QuestionAttemptRecord[]
   srs: Record<string, SrsState>
   topicSrs: Record<string, TopicSrsState>
+  /** Ids de sessoes apagadas, com o instante da exclusao. O merge e por id e
+   * last-write-wins, entao sem esta marcacao uma prova apagada aqui voltaria
+   * na proxima sincronia com um dispositivo que ainda a tivesse. */
+  deletedSessions: Record<string, number>
 }

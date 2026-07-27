@@ -8,6 +8,7 @@ import { getSession } from '../lib/storage'
 import TopicTags from '../components/TopicTags'
 import ScratchPad from '../components/ScratchPad'
 import { hasContent, loadScratch, type Scratch } from '../lib/scratch'
+import { fetchScratch } from '../lib/scratchSync'
 import {
   ALTERNATIVES_NOTE,
   MAX_AWAY_SECONDS,
@@ -44,6 +45,11 @@ export default function Results() {
     if (sessionId) {
       setSession(getSession(sessionId) ?? null)
       setScratchMap(loadScratch(sessionId))
+      // Revisar no computador a prova feita no celular tem que mostrar as
+      // contas que foram rascunhadas la.
+      void fetchScratch(sessionId).then((remote) => {
+        if (remote) setScratchMap((prev) => (Object.keys(prev).length > 0 ? prev : remote))
+      })
     }
   }, [sessionId])
 

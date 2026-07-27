@@ -16,6 +16,7 @@ import {
 import TopicTags from '../components/TopicTags'
 import ScratchPad from '../components/ScratchPad'
 import { EMPTY_SCRATCH, hasContent, loadScratch, saveScratch, type Scratch } from '../lib/scratch'
+import { fetchScratch, uploadScratch } from '../lib/scratchSync'
 import { MAX_AWAY_SECONDS, MAX_TAB_EXITS, summarizeAbsences } from '../lib/examRules'
 
 const LETTERS: AnswerLetter[] = ['A', 'B', 'C', 'D', 'E']
@@ -88,6 +89,12 @@ export default function Exam() {
       elapsedRef.current = s.elapsedSeconds
       timeRef.current = { ...s.timePerQuestion }
       setScratchMap(loadScratch(s.id))
+      /* Retomar no outro aparelho tem que trazer o rascunho junto. Se o
+         download demorar e a pessoa ja tiver escrito algo, o que ela escreveu
+         vence -- por isso o merge so acontece se o mapa ainda estiver vazio. */
+      void fetchScratch(s.id).then((remote) => {
+        if (remote) setScratchMap((prev) => (Object.keys(prev).length > 0 ? prev : remote))
+      })
     }
   }, [sessionId])
 
@@ -211,6 +218,9 @@ export default function Exam() {
     }
     sessionRef.current = finished
     upsertSession(finished)
+    // A prova acabou: sobe o rascunho agora, sem esperar o atraso que existe
+    // so para nao subir megabytes a cada traco durante a prova.
+    void uploadScratch(finished.id)
     const qmap = new Map(data.questions.map((q) => [q.id, q]))
     const now = Date.now()
     addAttempts(buildAttemptRecords(finished, qmap))

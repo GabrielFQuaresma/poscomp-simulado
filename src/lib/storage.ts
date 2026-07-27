@@ -1,26 +1,26 @@
 import type { AppData, ExamSession, QuestionAttemptRecord, SrsState, TopicSrsState } from '../types'
 import { clearAllScratch, clearScratch } from './scratch'
+import { emptyData, mergeAppData, migrate } from './merge'
 
 const STORAGE_KEY = 'poscomp-simulado:data'
 
-function emptyData(): AppData {
-  return { version: 3, sessions: [], attempts: [], srs: {}, topicSrs: {} }
+/** Avisos para a camada de sincronia. Ficam aqui porque este e o unico lugar
+ * que sabe quando os dados mudaram; a sincronia se inscreve e nada mais no app
+ * precisa saber que ela existe. Sem sincronia configurada, ninguem se inscreve
+ * e o custo e uma chamada a um campo nulo. */
+export interface StorageListeners {
+  /** Algo mudou no historico local -- vale agendar um envio. */
+  changed: () => void
+  /** Uma prova foi apagada; o rascunho dela tambem precisa sumir do servidor. */
+  sessionDeleted: (sessionId: string) => void
+  /** O usuario pediu para apagar tudo, inclusive o que esta na nuvem. */
+  reset: () => void
 }
 
-/** Preenche os campos que versoes anteriores nao gravavam. Nada e descartado:
- * o historico de quem ja usava o site continua valendo, so sem tempo por
- * questao (que ninguem media) e sem agenda de temas (que so passa a existir
- * conforme novas provas forem finalizadas). */
-function migrate(data: AppData): AppData {
-  data.srs ??= {}
-  data.topicSrs ??= {}
-  for (const s of data.sessions) {
-    s.timePerQuestion ??= {}
-    s.absences ??= []
-  }
-  for (const a of data.attempts) a.secondsSpent ??= 0
-  data.version = 3
-  return data
+let listeners: Partial<StorageListeners> = {}
+
+export function setStorageListeners(next: Partial<StorageListeners>): void {
+  listeners = next
 }
 
 /** Copia em memoria do que esta no localStorage. Sem ela, cada getter reparseia
@@ -49,24 +49,40 @@ export function loadData(): AppData {
   }
 }
 
-export function saveData(data: AppData): void {
+function write(data: AppData): void {
   cache = data
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
 }
 
+export function saveData(data: AppData): void {
+  write(data)
+  listeners.changed?.()
+}
+
+/** Grava o que veio da nuvem ja mesclado. Nao avisa `changed`: quem chama esta
+ * funcao e a propria sincronia, que envia o resultado logo em seguida -- avisar
+ * aqui agendaria um segundo envio identico. Invalidar o cache e o ponto: sem
+ * isto as telas continuariam lendo a copia em memoria anterior ao merge. */
+export function applyRemoteData(data: AppData): void {
+  write(data)
+}
+
 export function upsertSession(session: ExamSession): void {
   const data = loadData()
-  const idx = data.sessions.findIndex((s) => s.id === session.id)
-  if (idx >= 0) data.sessions[idx] = session
-  else data.sessions.push(session)
+  const stamped: ExamSession = { ...session, updatedAt: Date.now() }
+  const idx = data.sessions.findIndex((s) => s.id === stamped.id)
+  if (idx >= 0) data.sessions[idx] = stamped
+  else data.sessions.push(stamped)
   saveData(data)
 }
 
 export function deleteSession(sessionId: string): void {
   const data = loadData()
   data.sessions = data.sessions.filter((s) => s.id !== sessionId)
+  data.deletedSessions[sessionId] = Date.now()
   saveData(data)
   clearScratch(sessionId)
+  listeners.sessionDeleted?.(sessionId)
 }
 
 export function getSession(sessionId: string): ExamSession | undefined {
@@ -119,59 +135,25 @@ export function resetAll(): void {
   cache = null
   localStorage.removeItem(STORAGE_KEY)
   clearAllScratch()
+  // Sem apagar tambem no servidor, a proxima sincronia traria tudo de volta e
+  // o botao pareceria nao funcionar.
+  listeners.reset?.()
 }
 
 export function exportData(): string {
   return JSON.stringify(loadData(), null, 2)
 }
 
-/** Merge imported data into local data. Sessions/attempts are merged by id
- * with the newer (by timestamp) version winning, so importing on a second
- * computer can't clobber more recent local progress. */
+/** Importa um arquivo exportado por outro dispositivo. Usa o mesmo merge da
+ * sincronia: e a mesma pergunta ("estes dois estados sao um so, quem vence
+ * campo a campo?"), e manter duas respostas para ela seria manter dois jeitos
+ * de perder dados. */
 export function importData(json: string): { sessions: number; attempts: number } {
   const incoming = JSON.parse(json) as AppData
   if (!incoming.sessions || !incoming.attempts) {
     throw new Error('Arquivo invalido: formato nao reconhecido')
   }
-  const current = loadData()
-
-  const sessionMap = new Map<string, ExamSession>()
-  for (const s of current.sessions) sessionMap.set(s.id, s)
-  for (const s of incoming.sessions) {
-    const existing = sessionMap.get(s.id)
-    if (!existing || (s.finishedAt ?? s.createdAt) >= (existing.finishedAt ?? existing.createdAt)) {
-      sessionMap.set(s.id, s)
-    }
-  }
-
-  const attemptKey = (a: QuestionAttemptRecord) => `${a.sessionId}:${a.questionId}:${a.timestamp}`
-  const attemptMap = new Map<string, QuestionAttemptRecord>()
-  for (const a of current.attempts) attemptMap.set(attemptKey(a), a)
-  for (const a of incoming.attempts) attemptMap.set(attemptKey(a), a)
-
-  const srs: Record<string, SrsState> = { ...current.srs }
-  for (const [qid, incomingState] of Object.entries(incoming.srs ?? {})) {
-    const existing = srs[qid]
-    if (!existing || incomingState.lastReviewedAt >= existing.lastReviewedAt) {
-      srs[qid] = incomingState
-    }
-  }
-
-  const topicSrs: Record<string, TopicSrsState> = { ...current.topicSrs }
-  for (const [slug, incomingState] of Object.entries(incoming.topicSrs ?? {})) {
-    const existing = topicSrs[slug]
-    if (!existing || incomingState.lastReviewedAt >= existing.lastReviewedAt) {
-      topicSrs[slug] = incomingState
-    }
-  }
-
-  const merged: AppData = migrate({
-    version: 3,
-    sessions: Array.from(sessionMap.values()),
-    attempts: Array.from(attemptMap.values()),
-    srs,
-    topicSrs,
-  })
+  const merged = mergeAppData(loadData(), incoming)
   saveData(merged)
   return { sessions: merged.sessions.length, attempts: merged.attempts.length }
 }

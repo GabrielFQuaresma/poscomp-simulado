@@ -24,6 +24,12 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run build
+        # Sem estes segredos o site sai no ar em modo local: funciona igual,
+        # so sem login e sem sincronia. A chave anonima e publica por design --
+        # ela vai no bundle de qualquer forma, e quem protege os dados e o RLS.
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

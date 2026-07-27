@@ -279,3 +279,82 @@ Branch `claude/study-strategies-integration-2j91xg`, três commits à frente da
 
 O `deploy.yml` publica no GitHub Pages a cada push na `main`. O `ci.yml` roda
 lint e build em pull request.
+
+---
+
+# Implementado
+
+O que este documento pediu está no ar. O que segue é o registro operacional:
+onde as coisas ficaram e o que foi decidido nos pontos que o handoff deixou
+em aberto.
+
+## Infraestrutura
+
+Projeto Supabase `poscomp-simulado`, ref `nrtmgvgaxyafnjticyhr`, região
+`sa-east-1` — separado do projeto `finance-control`, que continua intocado.
+
+- Schema aplicado e versionado em `supabase/schema.sql`, para o banco poder ser
+  recriado do zero sem depender do que ficou no dashboard.
+- URLs de redirecionamento cadastradas: produção e `localhost:5173`, ambas com
+  o `/poscomp-simulado/`.
+- Segredos `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` no repositório,
+  repassados ao passo de build do `deploy.yml`. O `ci.yml` continua sem eles de
+  propósito.
+- Cadastro aberto: qualquer e-mail pode entrar e terá os próprios dados,
+  isolados pelo RLS. É o que a verificação nº 5 deste documento pressupõe.
+
+**Limite do plano gratuito que vale saber:** o SMTP embutido do Supabase manda
+poucos e-mails por hora. Para uso pessoal sobra, mas se um dia o link demorar,
+é aí que olhar primeiro.
+
+## Decisões tomadas nos pontos em aberto
+
+**Exclusão agora se propaga.** O documento mandava decidir em vez de descobrir
+depois: foi implementada a marcação de exclusão. `AppData` ganhou
+`deletedSessions` (id → instante), consultada no merge, e a versão subiu para 4.
+Uma prova apagada num aparelho não volta mais pelo outro.
+
+As tentativas **sobrevivem** à exclusão da sessão, como já acontecia no
+`deleteSession` local: o que se apaga é a prova, não o fato de a questão ter
+sido respondida um dia — é disso que vivem as estatísticas e o SRS.
+
+**Relógio do dispositivo:** mantido o critério por timestamp de cliente, como o
+documento autorizou para uso pessoal. Mas `ExamSession` ganhou `updatedAt`,
+porque sem ele uma prova **em andamento** só teria o `createdAt`, que nunca
+muda: dois aparelhos com o mesmo simulado aberto empatariam sempre e a cópia
+velha poderia vencer a nova. Esse era um caminho real de perda de dados.
+
+**"Resetar tudo" agora também limpa o servidor.** Sem isso a sincronia seguinte
+traria tudo de volta e o botão pareceria não funcionar. O aviso de confirmação
+muda de texto quando há sessão ativa, para deixar claro que o apagamento
+alcança os outros dispositivos.
+
+## Onde está o código
+
+| Arquivo | Papel |
+|---|---|
+| `src/lib/merge.ts` | `mergeAppData`, `migrate`, `emptyData` — puro, sem I/O |
+| `src/lib/supabase.ts` | cliente PKCE e `isSyncConfigured()` |
+| `src/lib/sync.ts` | motor: auth, baixa-mescla-sobe, atraso de envio, flush |
+| `src/lib/scratchSync.ts` | rascunhos no Storage, sob demanda |
+| `src/components/SyncPanel.tsx` | interface de login e estado da sincronia |
+
+`importData()` passou a usar o mesmo `mergeAppData` da sincronia: é a mesma
+pergunta, e manter duas respostas para ela seria manter dois jeitos de perder
+dados.
+
+## O que foi verificado
+
+- `npm run test` — 10 casos do `mergeAppData`, incluindo os dois cenários de
+  perda de dados (prova apagada que volta, cópia velha que vence a nova).
+- `npm run lint` e `npm run build`, com e sem as variáveis de ambiente. Sem
+  elas, nenhuma credencial entra no bundle e o site não mostra login.
+- Isolamento (verificação nº 5) testado **pela API, não pela interface**: dois
+  usuários criados na mão, 11 checagens — ler a linha do outro, gravar em nome
+  do outro, apagar a linha do outro, baixar e escrever na pasta de rascunho do
+  outro, e ler sem login. Todas barradas. Os usuários de teste foram removidos.
+- Um `?code=` na URL não confunde o `HashRouter`: a Home carrega normalmente.
+
+**Ainda não verificado, porque depende de dois aparelhos reais e do link no
+e-mail:** as verificações 2, 3 e 4 (dois navegadores com o mesmo login, o
+conflito com os dois offline, e o comportamento offline no meio da prova).

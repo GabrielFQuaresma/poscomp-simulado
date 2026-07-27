@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import Home from './pages/Home'
 import Exam from './pages/Exam'
 import Results from './pages/Results'
 import Stats from './pages/Stats'
 import Topics from './pages/Topics'
+import { startSync } from './lib/sync'
 
 function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
   return (
@@ -23,6 +25,13 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
 }
 
 function App() {
+  // Sem as variaveis do Supabase isto e uma funcao que retorna na primeira
+  // linha; com elas, e o unico ponto de partida da sincronia no app inteiro.
+  // A propria startSync se protege da montagem dupla do StrictMode.
+  useEffect(() => {
+    startSync()
+  }, [])
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
