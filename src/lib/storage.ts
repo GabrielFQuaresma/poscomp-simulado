@@ -1,4 +1,11 @@
-import type { AppData, ExamSession, QuestionAttemptRecord, SrsState, TopicSrsState } from '../types'
+import type {
+  AppData,
+  ExamSession,
+  QuestionAttemptRecord,
+  QuestionMark,
+  SrsState,
+  TopicSrsState,
+} from '../types'
 import { clearAllScratch, clearScratch } from './scratch'
 import { emptyData, mergeAppData, migrate } from './merge'
 
@@ -128,6 +135,23 @@ export function saveTopicSrsStates(states: TopicSrsState[]): void {
   if (states.length === 0) return
   const data = loadData()
   for (const s of states) data.topicSrs[s.topicSlug] = s
+  saveData(data)
+}
+
+/** Copia rasa de proposito: as telas guardam as marcas em estado do React e as
+ * gravacoes mexem no mapa de dentro do cache. Devolver a referencia viva faria
+ * a tela receber o objeto que ela ja tem e nao redesenhar depois de marcar. */
+export function getMarks(): Record<string, QuestionMark> {
+  return { ...loadData().marks }
+}
+
+/** Grava marcas ja montadas por `lib/marks`. Recebe uma lista porque a triagem
+ * do resultado costuma decidir varias de uma vez, e uma gravacao so evita
+ * disparar a sincronia uma vez por questao. */
+export function saveMarks(marks: QuestionMark[]): void {
+  if (marks.length === 0) return
+  const data = loadData()
+  for (const m of marks) data.marks[m.questionId] = m
   saveData(data)
 }
 

@@ -35,10 +35,17 @@ export function schedule(prev: Scheduling | undefined, quality: number, now: num
   }
 }
 
-/** Feedback binario da questao traduzido para a escala do SM-2: 4 e um acerto
- * sem hesitacao declarada, 1 e um erro que ainda assim reconhece o item. */
-function qualityFromCorrect(correct: boolean): number {
-  return correct ? 4 : 1
+/** Traduz o resultado da questao para a escala do SM-2. A escala existe
+ * justamente para graduar confianca, e a estrela da prova e a unica confissao
+ * de duvida que temos: sem ela, chutar certo e saber a resposta produzem o
+ * mesmo agendamento, e o item que voce nao domina volta daqui a seis dias como
+ * se estivesse resolvido.
+ *
+ * 4 = acerto sem hesitacao declarada; 3 = acerto com dificuldade (ainda avanca,
+ * mas com intervalo curto e ease menor); 1 = erro que ainda reconhece o item. */
+export function qualityFromOutcome(correct: boolean, unsure: boolean): number {
+  if (!correct) return 1
+  return unsure ? 3 : 4
 }
 
 /** Acerto no tema traduzido para a escala do SM-2, com um prior de Laplace
@@ -50,8 +57,14 @@ export function qualityFromAccuracy(correct: number, total: number): number {
   return Math.round(damped * 5)
 }
 
-export function reviewSrs(prev: SrsState | undefined, correct: boolean, now: number, questionId: string): SrsState {
-  return { questionId, ...schedule(prev, qualityFromCorrect(correct), now) }
+export function reviewSrs(
+  prev: SrsState | undefined,
+  correct: boolean,
+  now: number,
+  questionId: string,
+  unsure = false,
+): SrsState {
+  return { questionId, ...schedule(prev, qualityFromOutcome(correct, unsure), now) }
 }
 
 export function reviewTopicSrs(

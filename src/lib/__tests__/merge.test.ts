@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { AppData, ExamSession, QuestionAttemptRecord, SrsState } from '../../types'
+import type {
+  AppData,
+  ExamSession,
+  QuestionAttemptRecord,
+  QuestionMark,
+  SrsState,
+} from '../../types'
 import { emptyData, mergeAppData } from '../merge'
 
 function session(id: string, over: Partial<ExamSession> = {}): ExamSession {
@@ -42,6 +48,20 @@ function srs(questionId: string, lastReviewedAt: number): SrsState {
     easeFactor: 2.5,
     dueAt: lastReviewedAt + 86400000,
     lastReviewedAt,
+  }
+}
+
+function questionMark(over: Partial<QuestionMark> = {}): QuestionMark {
+  return {
+    questionId: 'q1',
+    reason: 'erro',
+    note: '',
+    sessionId: 's1',
+    createdAt: 1000,
+    updatedAt: 1000,
+    resolvedAt: null,
+    timesMarked: 1,
+    ...over,
   }
 }
 
@@ -125,8 +145,35 @@ describe('mergeAppData', () => {
     expect(merged.srs.q3.lastReviewedAt).toBe(3000)
   })
 
+  it('junta os cadernos de revisao dos dois dispositivos', () => {
+    const merged = mergeAppData(
+      data({ marks: { q1: questionMark({ questionId: 'q1' }) } }),
+      data({ marks: { q2: questionMark({ questionId: 'q2' }) } }),
+    )
+    expect(Object.keys(merged.marks).sort()).toEqual(['q1', 'q2'])
+  })
+
+  it('deixa a decisao mais recente sobre a marca vencer, nos dois sentidos', () => {
+    // Resolver e uma edicao, nao uma remocao: por isso a marca resolvida no
+    // celular nao reaparece aberta ao sincronizar com o computador.
+    const aberta = questionMark({ updatedAt: 2000, resolvedAt: null })
+    const resolvida = questionMark({ updatedAt: 8000, resolvedAt: 8000 })
+
+    expect(mergeAppData(data({ marks: { q1: aberta } }), data({ marks: { q1: resolvida } })).marks.q1.resolvedAt).toBe(8000)
+    expect(mergeAppData(data({ marks: { q1: resolvida } }), data({ marks: { q1: aberta } })).marks.q1.resolvedAt).toBe(8000)
+  })
+
+  it('deixa a remarcacao posterior reabrir a marca resolvida antes', () => {
+    const resolvida = questionMark({ updatedAt: 3000, resolvedAt: 3000, timesMarked: 1 })
+    const remarcada = questionMark({ updatedAt: 9000, resolvedAt: null, timesMarked: 2 })
+
+    const merged = mergeAppData(data({ marks: { q1: resolvida } }), data({ marks: { q1: remarcada } }))
+    expect(merged.marks.q1.resolvedAt).toBeNull()
+    expect(merged.marks.q1.timesMarked).toBe(2)
+  })
+
   it('aceita dados gravados antes da sincronia existir', () => {
-    // Formato v3: sem deletedSessions e sem updatedAt nas sessoes.
+    // Formato v3: sem deletedSessions, sem updatedAt nas sessoes e sem caderno.
     const antigo = {
       version: 3,
       sessions: [{ ...session('a'), updatedAt: undefined, finishedAt: 4000 }],
@@ -137,8 +184,9 @@ describe('mergeAppData', () => {
 
     const merged = mergeAppData(antigo, emptyData())
 
-    expect(merged.version).toBe(4)
+    expect(merged.version).toBe(5)
     expect(merged.deletedSessions).toEqual({})
+    expect(merged.marks).toEqual({})
     expect(merged.sessions[0].updatedAt).toBe(4000)
     expect(merged.attempts[0].secondsSpent).toBe(0)
   })
@@ -148,6 +196,7 @@ describe('mergeAppData', () => {
       sessions: [session('a', { finishedAt: 2000, updatedAt: 2000 })],
       attempts: [attempt({ sessionId: 'a' })],
       srs: { q1: srs('q1', 2000) },
+      marks: { q1: questionMark() },
       deletedSessions: { z: 100 },
     })
     const remote = data({ sessions: [session('b', { finishedAt: 3000, updatedAt: 3000 })] })

@@ -1,4 +1,5 @@
-import type { Area, AnswerLetter, CorrectionMode, ExamMode, ExamSession, Question, QuestionAttemptRecord, SrsState, TopicSrsState } from '../types'
+import type { Area, AnswerLetter, CorrectionMode, ExamMode, ExamSession, Question, QuestionAttemptRecord, QuestionMark, SrsState, TopicSrsState } from '../types'
+import { openMarks } from './marks'
 import { DAILY_REVIEW_LIMIT, isDue, reviewSrs, reviewTopicSrs } from './srs'
 
 export function newSessionId(): string {
@@ -192,6 +193,24 @@ export function buildSrsExam(
   return createSession('srs', `Revisao de questoes (${ids.length}${suffix}q)`, ids, opts)
 }
 
+/** Refaz as questoes do caderno de revisao, das marcadas ha mais tempo para as
+ * mais recentes. Aqui reencontrar a mesma imagem e o ponto, nao o defeito: a
+ * marca diz "esta eu nao resolvi", e a unica forma de saber se resolveu e
+ * tentar de novo. Para atacar o assunto em vez da questao, o caderno tambem
+ * oferece treinar os temas das marcadas, que cai no buildTopicExam. */
+export function buildMarkedExam(
+  questions: Question[],
+  marks: Record<string, QuestionMark>,
+  opts: NewExamOptions,
+  limit: number = DAILY_REVIEW_LIMIT,
+): ExamSession {
+  const byId = new Map(questions.map((q) => [q.id, q]))
+  const open = openMarks(marks).filter((m) => byId.has(m.questionId))
+  const ids = open.slice(0, limit).map((m) => m.questionId)
+  const suffix = open.length > ids.length ? ` de ${open.length}` : ''
+  return createSession('marked', `Marcadas (${ids.length}${suffix}q)`, ids, opts)
+}
+
 export function dueTopicSlugs(topicSrs: Record<string, TopicSrsState>, now: number): TopicSrsState[] {
   return Object.values(topicSrs)
     .filter((s) => isDue(s, now))
@@ -247,7 +266,10 @@ export function buildTopicSrsExam(
 }
 
 /** Atualiza o estado de repeticao espacada (SM-2) de cada questao respondida
- * na sessao. Questoes em branco sao ignoradas: nao houve tentativa a avaliar. */
+ * na sessao. Questoes em branco sao ignoradas: nao houve tentativa a avaliar.
+ *
+ * A estrela que sobreviveu ate o envio entra como duvida declarada: ninguem
+ * marca e deixa marcada aquilo de que tem certeza. */
 export function buildSrsUpdates(
   session: ExamSession,
   questionMap: Map<string, Question>,
@@ -259,7 +281,7 @@ export function buildSrsUpdates(
     const q = questionMap.get(id)
     const resp = session.responses[id]
     if (!q || !resp) continue
-    updates.push(reviewSrs(srsMap[id], isCorrect(q, resp), now, id))
+    updates.push(reviewSrs(srsMap[id], isCorrect(q, resp), now, id, !!session.flagged[id]))
   }
   return updates
 }
@@ -267,7 +289,9 @@ export function buildSrsUpdates(
 /** Reagenda cada tema tocado pela sessao a partir do seu acerto no tema. Um
  * tema so entra na agenda depois de aparecer numa prova, entao o calendario se
  * monta sozinho conforme voce estuda. Anuladas ficam fora da conta: acerto
- * automatico inflaria o tema e o mandaria para longe sem motivo. */
+ * automatico inflaria o tema e o mandaria para longe sem motivo -- e acerto
+ * marcado tambem nao conta, pelo mesmo motivo: um tema em que voce chutou tudo
+ * certo nao merece sumir da agenda por seis dias. */
 export function buildTopicSrsUpdates(
   session: ExamSession,
   questionMap: Map<string, Question>,
@@ -282,7 +306,7 @@ export function buildTopicSrsUpdates(
     const slug = q.topics[0]
     const entry = tally.get(slug) ?? { correct: 0, total: 0 }
     entry.total += 1
-    if (isCorrect(q, resp)) entry.correct += 1
+    if (isCorrect(q, resp) && !session.flagged[id]) entry.correct += 1
     tally.set(slug, entry)
   }
   return [...tally.entries()].map(([slug, v]) =>

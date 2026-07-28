@@ -5,6 +5,7 @@ import Exam from './pages/Exam'
 import Results from './pages/Results'
 import Stats from './pages/Stats'
 import Topics from './pages/Topics'
+import Marked from './pages/Marked'
 import { startSync } from './lib/sync'
 
 function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
@@ -42,6 +43,7 @@ function App() {
           <nav className="flex gap-1">
             <NavItem to="/">Inicio</NavItem>
             <NavItem to="/topicos">Temas</NavItem>
+            <NavItem to="/marcadas">Caderno</NavItem>
             <NavItem to="/stats">Estatisticas</NavItem>
           </nav>
         </div>
@@ -52,6 +54,7 @@ function App() {
           <Route path="/exam/:sessionId" element={<Exam />} />
           <Route path="/results/:sessionId" element={<Results />} />
           <Route path="/topicos" element={<Topics />} />
+          <Route path="/marcadas" element={<Marked />} />
           <Route path="/stats" element={<Stats />} />
         </Routes>
       </main>
