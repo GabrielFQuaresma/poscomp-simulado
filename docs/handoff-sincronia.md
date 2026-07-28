@@ -143,12 +143,20 @@ usa para impedir leitura cruzada. Mantenha a convenção de caminho.
 
 ## Plano de implementação
 
+### 0. Este trabalho tem que ser feito localmente
+
+Não é preferência: a sessão web do Claude Code roda atrás de um proxy cujo
+política de rede **nega conexões a `supabase.co`** (403 no CONNECT). Nenhuma
+verificação contra o projeto real — login, RLS, upload de rascunho — pode ser
+feita de lá. Rode numa máquina com acesso à internet aberto.
+
 ### 1. Configuração e degradação graciosa
 
 Dependência: `npm i @supabase/supabase-js`.
 
-Variáveis: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`, num `.env.local`
-(adicione `.env*.local` ao `.gitignore`). A chave anônima é pública por design —
+Variáveis: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`, num `.env.local`.
+Já existe `.env.example` com os nomes, e o `.gitignore` já cobre `.env.*`.
+A chave anônima é pública por design —
 ela vai no bundle JavaScript de qualquer forma; quem protege os dados é o RLS.
 
 **Requisito não negociável:** sem as variáveis definidas, o site tem que

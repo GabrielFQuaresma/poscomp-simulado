@@ -3,6 +3,13 @@ dist/
 .DS_Store
 *.log
 
+# credenciais locais. A chave anonima do Supabase e publica por design (vai no
+# bundle de qualquer forma), mas este arquivo nao deve ser versionado: e onde
+# uma chave de servico acabaria parando por engano.
+.env
+.env.*
+!.env.example
+
 # pipeline working area (source PDFs cloned locally, not committed)
 pipeline/source/
 pipeline/.venv/
