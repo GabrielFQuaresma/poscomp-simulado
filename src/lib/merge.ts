@@ -1,6 +1,6 @@
 import type { AppData, ExamSession, QuestionAttemptRecord } from '../types'
 
-export const DATA_VERSION = 4
+export const DATA_VERSION = 5
 
 export function emptyData(): AppData {
   return {
@@ -9,6 +9,7 @@ export function emptyData(): AppData {
     attempts: [],
     srs: {},
     topicSrs: {},
+    marks: {},
     deletedSessions: {},
   }
 }
@@ -20,6 +21,7 @@ export function emptyData(): AppData {
 export function migrate(data: AppData): AppData {
   data.srs ??= {}
   data.topicSrs ??= {}
+  data.marks ??= {}
   data.deletedSessions ??= {}
   for (const s of data.sessions) {
     s.timePerQuestion ??= {}
@@ -96,12 +98,22 @@ export function mergeAppData(local: AppData, incoming: AppData): AppData {
     if (!existing || state.lastReviewedAt >= existing.lastReviewedAt) topicSrs[slug] = state
   }
 
+  // As marcas nao precisam de lapide como as sessoes: resolver e uma edicao,
+  // nao uma remocao, entao a marca resolvida aqui vence a versao aberta que o
+  // outro dispositivo ainda tem -- e vice-versa, se la ela foi remarcada depois.
+  const marks = { ...a.marks }
+  for (const [questionId, mark] of Object.entries(b.marks)) {
+    const existing = marks[questionId]
+    if (!existing || mark.updatedAt >= existing.updatedAt) marks[questionId] = mark
+  }
+
   return {
     version: DATA_VERSION,
     sessions: Array.from(sessionMap.values()),
     attempts: Array.from(attemptMap.values()),
     srs,
     topicSrs,
+    marks,
     deletedSessions,
   }
 }

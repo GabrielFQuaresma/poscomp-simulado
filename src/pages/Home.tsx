@@ -5,6 +5,7 @@ import { loadQuestions, AREA_LABELS } from '../lib/questions'
 import { loadTopics } from '../lib/topics'
 import {
   buildAreaExam,
+  buildMarkedExam,
   buildRandomExam,
   buildSrsExam,
   buildTopicSrsExam,
@@ -14,11 +15,13 @@ import {
 } from '../lib/examLogic'
 import { DAILY_REVIEW_LIMIT, daysUntilDue } from '../lib/srs'
 import { ALTERNATIVES_NOTE } from '../lib/examRules'
+import { MARK_REASONS, REASON_SHORT, countByReason, openMarks } from '../lib/marks'
 import {
   deleteSession,
   exportData,
   getAttempts,
   getInProgressSessions,
+  getMarks,
   getSrsMap,
   getTopicSrsMap,
   importData,
@@ -42,6 +45,8 @@ export default function Home() {
   const [dueTopics, setDueTopics] = useState<string[]>([])
   const [scheduledTopics, setScheduledTopics] = useState(0)
   const [nextTopicInDays, setNextTopicInDays] = useState<number | null>(null)
+  const [markedCount, setMarkedCount] = useState(0)
+  const [markedByReason, setMarkedByReason] = useState(countByReason([]))
 
   const [correctionMode, setCorrectionMode] = useState<CorrectionMode>('exam')
   const [timerEnabled, setTimerEnabled] = useState(true)
@@ -81,6 +86,10 @@ export default function Home() {
     setDueTopics(dueTopicSlugs(topicMap, now).map((s) => s.topicSlug))
     const upcoming = scheduled.filter((s) => s.dueAt > now).sort((a, b) => a.dueAt - b.dueAt)[0]
     setNextTopicInDays(upcoming ? daysUntilDue(upcoming, now) : null)
+
+    const open = openMarks(getMarks())
+    setMarkedCount(open.length)
+    setMarkedByReason(countByReason(open))
 
     setInProgress(getInProgressSessions())
   }, [data, sync.lastSyncedAt])
@@ -136,6 +145,11 @@ export default function Home() {
   function startSrsReview() {
     if (!data) return
     startSession(buildSrsExam(data.questions, getSrsMap(), reviewOpts))
+  }
+
+  function startMarkedReview() {
+    if (!data) return
+    startSession(buildMarkedExam(data.questions, getMarks(), reviewOpts))
   }
 
   function handleExport() {
@@ -311,6 +325,38 @@ export default function Home() {
           Iniciar pratica
         </button>
       </section>
+
+      {markedCount > 0 && (
+        <section className="bg-white dark:bg-gray-900 border border-indigo-300 dark:border-indigo-800 rounded-lg p-4">
+          <h2 className="font-semibold mb-1">Caderno de revisao</h2>
+          <p className="text-sm text-gray-500 mb-3">
+            <strong>
+              {markedCount} {markedCount === 1 ? 'questao marcada' : 'questoes marcadas'}
+            </strong>{' '}
+            esperando:{' '}
+            {MARK_REASONS.filter((r) => markedByReason[r] > 0)
+              .map((r) => `${markedByReason[r]} de ${REASON_SHORT[r].toLowerCase()}`)
+              .join(' · ')}
+            . Sao as que voce mesmo separou — nenhuma agenda escolhe melhor do que isso o que
+            revisar hoje.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              className="px-4 py-2 rounded bg-indigo-600 text-white font-medium text-sm"
+              onClick={startMarkedReview}
+            >
+              Refazer as marcadas ({Math.min(markedCount, DAILY_REVIEW_LIMIT)}
+              {markedCount > DAILY_REVIEW_LIMIT && ` de ${markedCount}`})
+            </button>
+            <button
+              className="px-4 py-2 rounded border border-gray-300 dark:border-gray-700 font-medium text-sm"
+              onClick={() => navigate('/marcadas')}
+            >
+              Abrir caderno
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
         <h2 className="font-semibold mb-1">Revisao espacada</h2>

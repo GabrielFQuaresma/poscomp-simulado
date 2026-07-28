@@ -291,6 +291,7 @@ export default function Exam() {
               <button
                 className={`text-xs px-2 py-1 rounded border ${flagged ? 'bg-yellow-100 border-yellow-400 text-yellow-800' : 'border-gray-300 text-gray-500'}`}
                 onClick={toggleFlag}
+                title="Serve para voltar nela antes de entregar, como na prova real. O que continuar marcado no fim vai para o caderno de revisao."
               >
                 {flagged ? '★ Marcada para revisao' : '☆ Marcar para revisao'}
               </button>
